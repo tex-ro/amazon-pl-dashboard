@@ -1,1113 +1,1076 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { TrendingUp, TrendingDown, DollarSign, ShoppingCart, Truck, RefreshCw, Download, Calendar, BarChart3, PieChart, AlertTriangle, CheckCircle, X, Plus, Search, Filter, Upload, Eye, FileText, Package, Cloud, Check } from 'lucide-react';
-import { LineChart, Line, BarChart, Bar, PieChart as RePieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-
-const VendorPnLDashboard = () => {
-  const [selectedVendor, setSelectedVendor] = useState('etrade');
-  const [activeTab, setActiveTab] = useState('overview');
-  const [showQuickEntry, setShowQuickEntry] = useState(false);
-  const [showUploadModal, setShowUploadModal] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState('margin');
-  const [dateRange, setDateRange] = useState({ start: '2025-10-01', end: '2025-10-31' });
-  const [uploadedData, setUploadedData] = useState(null);
-  
-  // Google Sheets sync state
-  const [syncStatus, setSyncStatus] = useState('idle'); // idle, syncing, success, error
-  const [lastSyncTime, setLastSyncTime] = useState(null);
-  const [syncedRecords, setSyncedRecords] = useState(new Set());
-  const [autoSync, setAutoSync] = useState(false);
-
-  const vendors = [
-    { id: 'etrade', name: 'Etrade', color: 'from-blue-500 to-blue-600' },
-    { id: 'retailez', name: 'Retailez', color: 'from-green-500 to-green-600' },
-    { id: 'clicktech', name: 'Clicktech', color: 'from-purple-500 to-purple-600' }
-  ];
-
-  // Sample ASIN cost mapping (you'll upload this)
-  const asinCostMapping = {
-    'B0FQ2DKLBZ': 950,
-    'B0DXK2LP5M': 180,
-    'B0CBN7X3V1': 450,
-    'B0FLKBTVPM': 85,
-    'B0FM454VC4': 1450,
-    'B0FHHNK55H': 580,
-    'B0C72QSYTL': 970,
-    'B0FC687JRP': 75,
-    'B0F9VJTFS5': 220,
-    'B0CLGJ1Y46': 550,
-    'B0F9VJ3T51': 650,
-    'B0DSKK7CZX': 115,
-    'B0BKXTTJSQ': 1500,
-    'B0DCC3C7BB': 620,
-    'B0CP1X39PJ': 55,
-    'B0CF8VQCWX': 1800,
-    'B0CDSLG429': 1400,
-    'B0CLGDSF3Q': 370,
-    'B0FC67FQKH': 130,
-    'B0F4CNDZWV': 450,
-    'B0CLGFJ3M3': 1200,
-    'B0FLP5K9CW': 480,
-    'B0FB9FP499': 780,
-    'B0FC65GF7Y': 175,
-    'B0FC673NKG': 75,
-    'B0B3JT1FPG': 1800,
-    'B0DXJY9D6H': 110,
-    'B0FFSG7MT5': 125,
-    'B0FKBS2DKL': 550,
-    'B0D22ZJDRX': 630,
-    'B0DPPWQQDX': 1900,
-    'B0DPMRRXZP': 1900,
-    'B0F4CL2WLR': 680,
-    'B0F4CQPPFW': 560,
-    'B0FQ2B4XD8': 1400,
-    'B0FQ2BGZLN': 1200,
-    'B0FLPKT95M': 750
-  };
-
-  // Sample expense data (would come from your daily entries)
-  const expenseData = {
-    advertising: 85000,
-    ccogs: 25000,
-    vret: 15000,
-    freightPerInvoice: 30000
-  };
-
-  // Parse invoice data
-  const parseInvoiceData = (csvData) => {
-    const invoices = {};
-    const asinMetrics = {};
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vendor P&L Analytics Dashboard</title>
+    <meta name="description" content="Comprehensive Amazon Vendor Central analytics dashboard with ASIN-level profitability tracking">
     
-    csvData.forEach(row => {
-      const asin = row.ASIN;
-      const orderId = row['Order ID'];
-      const invoiceId = row['Invoice ID'];
-      const quantity = parseInt(row.Quantity);
-      const sellingPrice = parseFloat(row['Item Cost'].replace(/[₹,]/g, ''));
-      const cost = asinCostMapping[asin] || 0;
-      
-      // Group by invoice
-      if (!invoices[invoiceId]) {
-        invoices[invoiceId] = {
-          invoiceId,
-          date: row['Invoice date'],
-          items: [],
-          totalRevenue: 0,
-          totalCost: 0,
-          synced: syncedRecords.has(`invoice-${invoiceId}`)
-        };
-      }
-      
-      invoices[invoiceId].items.push({
-        orderId,
-        asin,
-        sku: row.SKU,
-        title: row['Item Title'],
-        quantity,
-        sellingPrice,
-        cost,
-        revenue: sellingPrice * quantity,
-        cogs: cost * quantity
-      });
-      
-      invoices[invoiceId].totalRevenue += sellingPrice * quantity;
-      invoices[invoiceId].totalCost += cost * quantity;
-      
-      // Group by ASIN
-      if (!asinMetrics[asin]) {
-        asinMetrics[asin] = {
-          asin,
-          sku: row.SKU,
-          title: row['Item Title'],
-          cost,
-          units: 0,
-          revenue: 0,
-          cogs: 0,
-          synced: syncedRecords.has(`asin-${asin}`)
-        };
-      }
-      
-      asinMetrics[asin].units += quantity;
-      asinMetrics[asin].revenue += sellingPrice * quantity;
-      asinMetrics[asin].cogs += cost * quantity;
-    });
+    <!-- React & ReactDOM from CDN -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     
-    return { invoices: Object.values(invoices), asinMetrics: Object.values(asinMetrics) };
-  };
-
-  // Sample parsed data (in production, this comes from uploaded CSV)
-  const sampleCSVData = [
-    { 'Order ID': 'TCb7hhcVk', 'Invoice ID': 'GT/437', 'Invoice date': '28 Oct 2025', ASIN: 'B0FQ2DKLBZ', SKU: 'transparent white drawer 4 layer', 'Item Title': 'TEX-RO Plastic Wardrobe', Quantity: '1', 'Item Cost': '₹1,206.99' },
-    { 'Order ID': 'TXyGt1YKk', 'Invoice ID': 'GT/437', 'Invoice date': '28 Oct 2025', ASIN: 'B0DXK2LP5M', SKU: 'jolly basket pack of 6', 'Item Title': 'TEX-RO Storage Box', Quantity: '1', 'Item Cost': '₹226.55' },
-    { 'Order ID': 'TNYgWhcMk', 'Invoice ID': 'GT/437', 'Invoice date': '28 Oct 2025', ASIN: 'B0CBN7X3V1', SKU: 'dish racks', 'Item Title': 'TEX-RO Utensils Basket', Quantity: '35', 'Item Cost': '₹594.00' }
-  ];
-
-  const { invoices, asinMetrics } = useMemo(() => parseInvoiceData(sampleCSVData), [syncedRecords]);
-
-  // Calculate metrics with expenses allocated proportionally
-  const calculateMetrics = (data, type = 'asin') => {
-    const totalRevenue = data.reduce((sum, item) => sum + item.revenue, 0);
+    <!-- Recharts from CDN -->
+    <script src="https://unpkg.com/recharts@2.5.0/dist/Recharts.js"></script>
     
-    return data.map(item => {
-      const revenueShare = item.revenue / totalRevenue;
-      const allocatedAd = expenseData.advertising * revenueShare;
-      const allocatedCCOGS = expenseData.ccogs * revenueShare;
-      const allocatedVRET = expenseData.vret * revenueShare;
-      const allocatedFreight = type === 'invoice' ? expenseData.freightPerInvoice / invoices.length : expenseData.freightPerInvoice * revenueShare;
-      
-      const grossProfit = item.revenue - item.cogs;
-      const totalExpenses = allocatedAd + allocatedCCOGS + allocatedVRET + allocatedFreight;
-      const netProfit = grossProfit - totalExpenses;
-      const margin = ((netProfit / item.revenue) * 100).toFixed(2);
-      const roi = ((netProfit / item.cogs) * 100).toFixed(2);
-      
-      return {
-        ...item,
-        grossProfit,
-        allocatedAd,
-        allocatedCCOGS,
-        allocatedVRET,
-        allocatedFreight,
-        totalExpenses,
-        netProfit,
-        margin: parseFloat(margin),
-        roi: parseFloat(roi)
-      };
-    });
-  };
-
-  const asinWithMetrics = useMemo(() => calculateMetrics(asinMetrics, 'asin'), [asinMetrics]);
-  const invoiceWithMetrics = useMemo(() => calculateMetrics(invoices.map(inv => ({
-    ...inv,
-    revenue: inv.totalRevenue,
-    cogs: inv.totalCost
-  })), 'invoice'), [invoices]);
-
-  // Sync to Google Sheets
-  const syncToGoogleSheets = async () => {
-    setSyncStatus('syncing');
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
     
-    try {
-      // Prepare data for sync
-      const syncData = {
-        vendor: selectedVendor,
-        dateRange,
-        timestamp: new Date().toISOString(),
-        asinData: asinWithMetrics.map(a => ({
-          asin: a.asin,
-          sku: a.sku,
-          title: a.title,
-          units: a.units,
-          cost: a.cost,
-          revenue: a.revenue,
-          cogs: a.cogs,
-          netProfit: a.netProfit,
-          margin: a.margin,
-          roi: a.roi,
-          totalExpenses: a.totalExpenses
-        })),
-        invoiceData: invoiceWithMetrics.map(inv => ({
-          invoiceId: inv.invoiceId,
-          date: inv.date,
-          revenue: inv.revenue,
-          cogs: inv.cogs,
-          netProfit: inv.netProfit,
-          margin: inv.margin,
-          roi: inv.roi,
-          totalExpenses: inv.totalExpenses
-        })),
-        expenses: expenseData
-      };
-
-      // Call backend API to sync to Google Sheets
-      const response = await fetch('/api/sync-to-sheets', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(syncData)
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        
-        // Mark records as synced
-        const newSyncedRecords = new Set(syncedRecords);
-        asinWithMetrics.forEach(a => newSyncedRecords.add(`asin-${a.asin}`));
-        invoiceWithMetrics.forEach(inv => newSyncedRecords.add(`invoice-${inv.invoiceId}`));
-        setSyncedRecords(newSyncedRecords);
-        
-        setSyncStatus('success');
-        setLastSyncTime(new Date());
-        
-        // Reset to idle after 3 seconds
-        setTimeout(() => setSyncStatus('idle'), 3000);
-      } else {
-        throw new Error('Sync failed');
-      }
-    } catch (error) {
-      console.error('Sync error:', error);
-      setSyncStatus('error');
-      setTimeout(() => setSyncStatus('idle'), 3000);
-    }
-  };
-
-  // Auto-sync when data changes
-  useEffect(() => {
-    if (autoSync && asinWithMetrics.length > 0) {
-      const timer = setTimeout(() => {
-        syncToGoogleSheets();
-      }, 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [asinWithMetrics, invoiceWithMetrics, autoSync]);
-
-  // Filter by margin categories
-  const highMargin = asinWithMetrics.filter(a => a.margin >= 20);
-  const mediumMargin = asinWithMetrics.filter(a => a.margin >= 10 && a.margin < 20);
-  const lowMargin = asinWithMetrics.filter(a => a.margin < 10);
-  
-  // ROI alerts
-  const lowROI = asinWithMetrics.filter(a => a.roi < 15);
-  const highROI = asinWithMetrics.filter(a => a.roi >= 30);
-
-  // Chart data
-  const marginDistributionData = [
-    { name: 'High Margin (≥20%)', value: highMargin.length, color: '#10b981' },
-    { name: 'Medium Margin (10-20%)', value: mediumMargin.length, color: '#f59e0b' },
-    { name: 'Low Margin (<10%)', value: lowMargin.length, color: '#ef4444' }
-  ];
-
-  const topASINsData = asinWithMetrics
-    .sort((a, b) => b.netProfit - a.netProfit)
-    .slice(0, 10)
-    .map(a => ({ name: a.sku.substring(0, 15), profit: a.netProfit }));
-
-  const MetricCard = ({ title, value, subtitle, icon: Icon, trend, accentColor, isCurrency = true }) => (
-    <div className="bg-white rounded-2xl p-6 shadow-sm hover:shadow-md transition-all duration-300 border border-gray-100">
-      <div className="flex items-start justify-between mb-4">
-        <div className={`p-3 rounded-xl bg-gradient-to-br ${accentColor}`}>
-          <Icon className="w-6 h-6 text-white" />
-        </div>
-        {trend && (
-          <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${
-            trend > 0 ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
-          }`}>
-            {trend > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-            {Math.abs(trend)}%
-          </div>
-        )}
-      </div>
-      <p className="text-sm font-medium text-gray-600">{title}</p>
-      <p className="text-3xl font-bold text-gray-900 mt-1">
-        {isCurrency && '₹'}{typeof value === 'number' ? value.toLocaleString('en-IN') : value}
-      </p>
-      {subtitle && <p className="text-xs text-gray-500 mt-1">{subtitle}</p>}
-    </div>
-  );
-
-  const handleFileUpload = (event) => {
-    const file = event.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        // Parse CSV content here
-        const text = e.target.result;
-        const lines = text.split('\n');
-        const headers = lines[0].split(',');
-        
-        const parsedData = lines.slice(1).map(line => {
-          const values = line.split(',');
-          const row = {};
-          headers.forEach((header, index) => {
-            row[header.trim()] = values[index]?.trim() || '';
-          });
-          return row;
-        }).filter(row => row['Order ID']); // Filter out empty rows
-        
-        setUploadedData(parsedData);
-        console.log('File uploaded:', file.name, parsedData.length, 'records');
-        setShowUploadModal(false);
-        
-        // Auto-sync if enabled
-        if (autoSync) {
-          setTimeout(() => syncToGoogleSheets(), 1000);
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
-      };
-      reader.readAsText(file);
-    }
-  };
 
-  const exportToCSV = () => {
-    const csvContent = [
-      ['ASIN', 'SKU', 'Units', 'Revenue', 'COGS', 'Net Profit', 'Margin %', 'ROI %', 'Synced'].join(','),
-      ...asinWithMetrics.map(a => 
-        [a.asin, a.sku, a.units, a.revenue, a.cogs, a.netProfit, a.margin, a.roi, a.synced ? 'Yes' : 'No'].join(',')
-      )
-    ].join('\n');
-    
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `pnl-report-${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-  };
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(to bottom right, #f9fafb, #f3f4f6);
+            color: #111827;
+        }
 
-  // Sync status badge component
-  const SyncStatusBadge = () => {
-    if (syncStatus === 'syncing') {
-      return (
-        <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 text-blue-700 rounded-lg border border-blue-200">
-          <RefreshCw className="w-4 h-4 animate-spin" />
-          <span className="text-sm font-medium">Syncing...</span>
-        </div>
-      );
-    }
-    
-    if (syncStatus === 'success') {
-      return (
-        <div className="flex items-center gap-2 px-3 py-2 bg-green-50 text-green-700 rounded-lg border border-green-200">
-          <CheckCircle className="w-4 h-4" />
-          <span className="text-sm font-medium">Synced!</span>
-        </div>
-      );
-    }
-    
-    if (syncStatus === 'error') {
-      return (
-        <div className="flex items-center gap-2 px-3 py-2 bg-red-50 text-red-700 rounded-lg border border-red-200">
-          <AlertTriangle className="w-4 h-4" />
-          <span className="text-sm font-medium">Sync Failed</span>
-        </div>
-      );
-    }
-    
-    return null;
-  };
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 1.5rem;
+        }
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-                <BarChart3 className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">Vendor Central Analytics</h1>
-                <p className="text-sm text-gray-600">Invoice & ASIN-level P&L monitoring</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <SyncStatusBadge />
-              
-              {lastSyncTime && (
-                <div className="text-xs text-gray-500">
-                  Last synced: {lastSyncTime.toLocaleTimeString()}
-                </div>
-              )}
-              
-              <label className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition">
-                <input
-                  type="checkbox"
-                  checked={autoSync}
-                  onChange={(e) => setAutoSync(e.target.checked)}
-                  className="w-4 h-4 text-blue-600 rounded"
-                />
-                <span className="text-sm font-medium text-gray-700">Auto-sync</span>
-              </label>
-              
-              <button 
-                onClick={syncToGoogleSheets}
-                disabled={syncStatus === 'syncing'}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2 font-medium shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Cloud className="w-4 h-4" />
-                Sync to Sheets
-              </button>
-              
-              <button 
-                onClick={exportToCSV}
-                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition flex items-center gap-2"
-              >
-                <Download className="w-4 h-4" />
-                Export
-              </button>
-              <button 
-                onClick={() => setShowUploadModal(true)}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2 font-medium shadow-sm"
-              >
-                <Upload className="w-4 h-4" />
-                Upload Invoice
-              </button>
-              <button 
-                onClick={() => setShowQuickEntry(true)}
-                className="px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 transition flex items-center gap-2 font-medium shadow-sm"
-              >
-                <Plus className="w-4 h-4" />
-                Add Expense
-              </button>
-            </div>
-          </div>
-        </div>
+        .header {
+            background: white;
+            border-bottom: 1px solid #e5e7eb;
+            position: sticky;
+            top: 0;
+            z-index: 50;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
 
-        {/* Tab Navigation */}
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="flex gap-4 border-t border-gray-200">
-            {['overview', 'asin-analysis', 'invoice-analysis', 'charts', 'roi-alerts'].map(tab => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-4 py-4 font-semibold transition border-b-2 capitalize ${
-                  activeTab === tab
-                    ? 'border-blue-600 text-blue-600'
-                    : 'border-transparent text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                {tab.replace('-', ' ')}
-                {tab === 'roi-alerts' && lowROI.length > 0 && (
-                  <span className="ml-2 bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">{lowROI.length}</span>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
+        .header-content {
+            padding: 1rem 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
 
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* Date Range Filter */}
-        <div className="bg-white rounded-2xl p-4 shadow-sm mb-6 border border-gray-100">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-gray-400" />
-                <span className="text-sm font-semibold text-gray-700">Date Range:</span>
-              </div>
-              <input
-                type="date"
-                value={dateRange.start}
-                onChange={(e) => setDateRange({...dateRange, start: e.target.value})}
-                className="px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <span className="text-gray-500">to</span>
-              <input
-                type="date"
-                value={dateRange.end}
-                onChange={(e) => setDateRange({...dateRange, end: e.target.value})}
-                className="px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <select 
-                value={selectedVendor}
-                onChange={(e) => setSelectedVendor(e.target.value)}
-                className="px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {vendors.map(v => (
-                  <option key={v.id} value={v.id}>{v.name}</option>
-                ))}
-              </select>
-            </div>
-            
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              <Check className="w-4 h-4 text-green-600" />
-              <span>{syncedRecords.size} records synced</span>
-            </div>
-          </div>
-        </div>
+        .header-title {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
 
-        {/* Overview Tab */}
-        {activeTab === 'overview' && (
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-              <MetricCard
-                title="Total Revenue"
-                value={asinWithMetrics.reduce((s, a) => s + a.revenue, 0)}
-                subtitle="From all orders"
-                icon={DollarSign}
-                trend={12.5}
-                accentColor="from-green-500 to-emerald-600"
-              />
-              <MetricCard
-                title="Net Profit"
-                value={asinWithMetrics.reduce((s, a) => s + a.netProfit, 0)}
-                subtitle={`Margin: ${((asinWithMetrics.reduce((s, a) => s + a.netProfit, 0) / asinWithMetrics.reduce((s, a) => s + a.revenue, 0)) * 100).toFixed(1)}%`}
-                icon={TrendingUp}
-                trend={8.3}
-                accentColor="from-blue-500 to-blue-600"
-              />
-              <MetricCard
-                title="Active ASINs"
-                value={asinWithMetrics.length}
-                subtitle={`${highMargin.length} high margin`}
-                icon={ShoppingCart}
-                accentColor="from-purple-500 to-purple-600"
-                isCurrency={false}
-              />
-              <MetricCard
-                title="Avg ROI"
-                value={`${(asinWithMetrics.reduce((s, a) => s + a.roi, 0) / asinWithMetrics.length).toFixed(1)}%`}
-                subtitle="Across all ASINs"
-                icon={BarChart3}
-                trend={5.2}
-                accentColor="from-orange-500 to-orange-600"
-                isCurrency={false}
-              />
-            </div>
+        .logo {
+            width: 2.5rem;
+            height: 2.5rem;
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            border-radius: 0.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
 
-            {/* Margin Distribution */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {[
-                { title: 'High Margin', count: highMargin.length, threshold: '≥20%', color: 'from-green-500 to-green-600', icon: CheckCircle },
-                { title: 'Medium Margin', count: mediumMargin.length, threshold: '10-20%', color: 'from-yellow-500 to-yellow-600', icon: BarChart3 },
-                { title: 'Low Margin', count: lowMargin.length, threshold: '<10%', color: 'from-red-500 to-red-600', icon: AlertTriangle }
-              ].map((item, idx) => (
-                <div key={idx} className={`bg-gradient-to-br ${item.color} rounded-2xl p-6 text-white shadow-lg`}>
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold">{item.title}</h3>
-                    <item.icon className="w-6 h-6" />
-                  </div>
-                  <p className="text-4xl font-bold mb-2">{item.count}</p>
-                  <p className="opacity-90 text-sm">ASINs {item.threshold} margin</p>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
+        .logo svg {
+            width: 1.5rem;
+            height: 1.5rem;
+            color: white;
+        }
 
-        {/* ASIN Analysis Tab */}
-        {activeTab === 'asin-analysis' && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-              <div className="flex gap-4 mb-6">
-                <div className="flex-1 relative">
-                  <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search ASIN or SKU..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <select 
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                  className="px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="margin">Sort by Margin</option>
-                  <option value="roi">Sort by ROI</option>
-                  <option value="revenue">Sort by Revenue</option>
-                  <option value="units">Sort by Units</option>
-                </select>
-              </div>
+        .title-text h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #111827;
+        }
 
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50 border-b border-gray-200">
-                    <tr>
-                      {['ASIN', 'Product', 'Units', 'Cost', 'Price', 'Revenue', 'COGS', 'Expenses', 'Net Profit', 'Margin %', 'ROI %', 'Sync'].map(h => (
-                        <th key={h} className="py-4 px-4 text-left text-xs font-semibold text-gray-600 uppercase">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {asinWithMetrics
-                      .filter(a => 
-                        a.asin.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                        a.sku.toLowerCase().includes(searchTerm.toLowerCase())
-                      )
-                      .sort((a, b) => {
-                        if (sortBy === 'margin') return b.margin - a.margin;
-                        if (sortBy === 'roi') return b.roi - a.roi;
-                        if (sortBy === 'revenue') return b.revenue - a.revenue;
-                        if (sortBy === 'units') return b.units - a.units;
-                        return 0;
-                      })
-                      .map((asin) => (
-                        <tr key={asin.asin} className="border-b border-gray-100 hover:bg-gray-50">
-                          <td className="py-4 px-4">
-                            <p className="font-semibold text-gray-900 text-sm">{asin.asin}</p>
-                            <p className="text-xs text-gray-500">{asin.sku}</p>
-                          </td>
-                          <td className="py-4 px-4 max-w-xs truncate text-sm text-gray-700">{asin.title}</td>
-                          <td className="py-4 px-4 text-center font-semibold">{asin.units}</td>
-                          <td className="py-4 px-4 text-right">₹{asin.cost}</td>
-                          <td className="py-4 px-4 text-right">₹{(asin.revenue/asin.units).toFixed(2)}</td>
-                          <td className="py-4 px-4 text-right font-bold">₹{asin.revenue.toLocaleString('en-IN')}</td>
-                          <td className="py-4 px-4 text-right">₹{asin.cogs.toLocaleString('en-IN')}</td>
-                          <td className="py-4 px-4 text-right">₹{asin.totalExpenses.toLocaleString('en-IN')}</td>
-                          <td className="py-4 px-4 text-right font-bold">₹{asin.netProfit.toLocaleString('en-IN')}</td>
-                          <td className="py-4 px-4">
-                            <span className={`px-3 py-1 rounded-full text-sm font-bold ${
-                              asin.margin >= 20 ? 'bg-green-50 text-green-600' :
-                              asin.margin >= 10 ? 'bg-yellow-50 text-yellow-600' :
-                              'bg-red-50 text-red-600'
-                            }`}>
-                              {asin.margin}%
-                            </span>
-                          </td>
-                          <td className="py-4 px-4">
-                            <span className="px-3 py-1 rounded-full bg-purple-50 text-purple-600 text-sm font-bold">
-                              {asin.roi}%
-                            </span>
-                          </td>
-                          <td className="py-4 px-4 text-center">
-                            {asin.synced ? (
-                              <CheckCircle className="w-5 h-5 text-green-600 inline-block" />
-                            ) : (
-                              <Cloud className="w-5 h-5 text-gray-400 inline-block" />
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
+        .title-text p {
+            font-size: 0.875rem;
+            color: #6b7280;
+        }
 
-        {/* Invoice Analysis Tab */}
-        {activeTab === 'invoice-analysis' && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-              <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-                <FileText className="w-6 h-6 text-blue-600" />
-                Invoice-Level Profitability
-              </h2>
-              
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50 border-b border-gray-200">
-                    <tr>
-                      {['Invoice ID', 'Date', 'Items', 'Revenue', 'COGS', 'Ad Spend', 'CCOGS', 'VRET', 'Freight', 'Net Profit', 'Margin %', 'ROI %', 'Sync'].map(h => (
-                        <th key={h} className="py-4 px-4 text-left text-xs font-semibold text-gray-600 uppercase">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {invoiceWithMetrics.map((inv) => (
-                      <tr key={inv.invoiceId} className="border-b border-gray-100 hover:bg-gray-50">
-                        <td className="py-4 px-4 font-semibold text-blue-600">{inv.invoiceId}</td>
-                        <td className="py-4 px-4 text-sm">{inv.date}</td>
-                        <td className="py-4 px-4 text-center">{inv.items?.length || 0}</td>
-                        <td className="py-4 px-4 text-right font-bold">₹{inv.revenue.toLocaleString('en-IN')}</td>
-                        <td className="py-4 px-4 text-right">₹{inv.cogs.toLocaleString('en-IN')}</td>
-                        <td className="py-4 px-4 text-right">₹{inv.allocatedAd.toLocaleString('en-IN')}</td>
-                        <td className="py-4 px-4 text-right">₹{inv.allocatedCCOGS.toLocaleString('en-IN')}</td>
-                        <td className="py-4 px-4 text-right">₹{inv.allocatedVRET.toLocaleString('en-IN')}</td>
-                        <td className="py-4 px-4 text-right font-semibold">₹{inv.allocatedFreight.toLocaleString('en-IN')}</td>
-                        <td className="py-4 px-4 text-right font-bold text-green-600">₹{inv.netProfit.toLocaleString('en-IN')}</td>
-                        <td className="py-4 px-4">
-                          <span className={`px-3 py-1 rounded-full text-sm font-bold ${
-                            inv.margin >= 20 ? 'bg-green-50 text-green-600' :
-                            inv.margin >= 10 ? 'bg-yellow-50 text-yellow-600' :
-                            'bg-red-50 text-red-600'
-                          }`}>
-                            {inv.margin}%
-                          </span>
-                        </td>
-                        <td className="py-4 px-4">
-                          <span className="px-3 py-1 rounded-full bg-purple-50 text-purple-600 text-sm font-bold">
-                            {inv.roi}%
-                          </span>
-                        </td>
-                        <td className="py-4 px-4 text-center">
-                          {inv.synced ? (
-                            <CheckCircle className="w-5 h-5 text-green-600 inline-block" />
-                          ) : (
-                            <Cloud className="w-5 h-5 text-gray-400 inline-block" />
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
 
-        {/* Charts Tab */}
-        {activeTab === 'charts' && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Margin Distribution Pie Chart */}
-              <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-                <h3 className="text-lg font-bold text-gray-900 mb-4">Margin Distribution</h3>
-                <ResponsiveContainer width="100%" height={300}>
-                  <RePieChart>
-                    <Pie
-                      data={marginDistributionData}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                      outerRadius={100}
-                      fill="#8884d8"
-                      dataKey="value"
-                    >
-                      {marginDistributionData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                  </RePieChart>
-                </ResponsiveContainer>
-              </div>
+        .btn {
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-weight: 500;
+            font-size: 0.875rem;
+            cursor: pointer;
+            border: none;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.2s;
+        }
 
-              {/* Top 10 ASINs by Profit */}
-              <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-                <h3 className="text-lg font-bold text-gray-900 mb-4">Top 10 ASINs by Net Profit</h3>
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={topASINsData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
-                    <YAxis />
-                    <Tooltip formatter={(value) => `₹${value.toLocaleString('en-IN')}`} />
-                    <Bar dataKey="profit" fill="#3b82f6" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+        .btn svg {
+            width: 1rem;
+            height: 1rem;
+        }
 
-              {/* Revenue vs Expenses */}
-              <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-                <h3 className="text-lg font-bold text-gray-900 mb-4">Revenue vs Expenses Breakdown</h3>
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={[
-                    { name: 'Revenue', value: asinWithMetrics.reduce((s, a) => s + a.revenue, 0) },
-                    { name: 'COGS', value: asinWithMetrics.reduce((s, a) => s + a.cogs, 0) },
-                    { name: 'Advertising', value: expenseData.advertising },
-                    { name: 'CCOGS', value: expenseData.ccogs },
-                    { name: 'VRET', value: expenseData.vret },
-                    { name: 'Freight', value: expenseData.freightPerInvoice },
-                  ]}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <Tooltip formatter={(value) => `₹${value.toLocaleString('en-IN')}`} />
-                    <Bar dataKey="value" fill="#8b5cf6" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+        .btn-primary {
+            background: #3b82f6;
+            color: white;
+        }
 
-              {/* ROI Distribution */}
-              <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-                <h3 className="text-lg font-bold text-gray-900 mb-4">ROI Distribution by ASIN</h3>
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={asinWithMetrics.sort((a, b) => b.roi - a.roi).slice(0, 10)}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="sku" angle={-45} textAnchor="end" height={100} />
-                    <YAxis />
-                    <Tooltip formatter={(value) => `${value}%`} />
-                    <Bar dataKey="roi" fill="#10b981" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          </div>
-        )}
+        .btn-primary:hover {
+            background: #2563eb;
+        }
 
-        {/* ROI Alerts Tab */}
-        {activeTab === 'roi-alerts' && (
-          <div className="space-y-6">
-            {/* Low ROI Alert */}
-            <div className="bg-white rounded-2xl p-6 shadow-sm border-l-4 border-red-500">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="p-3 bg-red-100 rounded-xl">
-                  <AlertTriangle className="w-6 h-6 text-red-600" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900">Low ROI Alert</h2>
-                  <p className="text-sm text-gray-600">ASINs with ROI below 15% - Review pricing or costs</p>
-                </div>
-              </div>
-              <div className="space-y-3">
-                {lowROI.map((asin) => (
-                  <div key={asin.asin} className="p-4 bg-red-50 rounded-xl border border-red-200">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <p className="font-bold text-gray-900">{asin.asin}</p>
-                          <span className="px-2 py-1 bg-red-200 text-red-800 text-xs font-semibold rounded-full">
-                            ROI: {asin.roi}%
-                          </span>
-                          <span className="px-2 py-1 bg-orange-200 text-orange-800 text-xs font-semibold rounded-full">
-                            Margin: {asin.margin}%
-                          </span>
-                          {asin.synced && (
-                            <CheckCircle className="w-4 h-4 text-green-600" />
-                          )}
-                        </div>
-                        <p className="text-sm text-gray-700 mb-3">{asin.title}</p>
-                        <div className="grid grid-cols-5 gap-4 text-sm">
-                          <div>
-                            <p className="text-gray-600">Cost</p>
-                            <p className="font-semibold">₹{asin.cost}</p>
-                          </div>
-                          <div>
-                            <p className="text-gray-600">Revenue</p>
-                            <p className="font-semibold">₹{asin.revenue.toLocaleString('en-IN')}</p>
-                          </div>
-                          <div>
-                            <p className="text-gray-600">Units</p>
-                            <p className="font-semibold">{asin.units}</p>
-                          </div>
-                          <div>
-                            <p className="text-gray-600">Expenses</p>
-                            <p className="font-semibold">₹{asin.totalExpenses.toLocaleString('en-IN')}</p>
-                          </div>
-                          <div>
-                            <p className="text-gray-600">Net Profit</p>
-                            <p className="font-semibold text-red-600">₹{asin.netProfit.toLocaleString('en-IN')}</p>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex gap-2 ml-4">
-                        <button className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm font-medium">
-                          Analyze
-                        </button>
-                        <button className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm font-medium">
-                          Action
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+        .btn-success {
+            background: #10b981;
+            color: white;
+        }
 
-            {/* High ROI Performers */}
-            <div className="bg-white rounded-2xl p-6 shadow-sm border-l-4 border-green-500">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="p-3 bg-green-100 rounded-xl">
-                  <CheckCircle className="w-6 h-6 text-green-600" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900">High ROI Performers</h2>
-                  <p className="text-sm text-gray-600">ASINs with ROI above 30% - Consider scaling up</p>
-                </div>
-              </div>
-              <div className="space-y-3">
-                {highROI.map((asin) => (
-                  <div key={asin.asin} className="p-4 bg-green-50 rounded-xl border border-green-200">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <p className="font-bold text-gray-900">{asin.asin}</p>
-                          <span className="px-2 py-1 bg-green-200 text-green-800 text-xs font-semibold rounded-full">
-                            ROI: {asin.roi}%
-                          </span>
-                          <span className="px-2 py-1 bg-emerald-200 text-emerald-800 text-xs font-semibold rounded-full">
-                            Margin: {asin.margin}%
-                          </span>
-                          {asin.synced && (
-                            <CheckCircle className="w-4 h-4 text-green-600" />
-                          )}
-                        </div>
-                        <p className="text-sm text-gray-700 mb-3">{asin.title}</p>
-                        <div className="grid grid-cols-5 gap-4 text-sm">
-                          <div>
-                            <p className="text-gray-600">Cost</p>
-                            <p className="font-semibold">₹{asin.cost}</p>
-                          </div>
-                          <div>
-                            <p className="text-gray-600">Revenue</p>
-                            <p className="font-semibold">₹{asin.revenue.toLocaleString('en-IN')}</p>
-                          </div>
-                          <div>
-                            <p className="text-gray-600">Units</p>
-                            <p className="font-semibold">{asin.units}</p>
-                          </div>
-                          <div>
-                            <p className="text-gray-600">Expenses</p>
-                            <p className="font-semibold">₹{asin.totalExpenses.toLocaleString('en-IN')}</p>
-                          </div>
-                          <div>
-                            <p className="text-gray-600">Net Profit</p>
-                            <p className="font-semibold text-green-600">₹{asin.netProfit.toLocaleString('en-IN')}</p>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex gap-2 ml-4">
-                        <button className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm font-medium">
-                          View Details
-                        </button>
-                        <button className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-medium">
-                          Scale Up
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+        .btn-success:hover {
+            background: #059669;
+        }
 
-      {/* Upload Modal */}
-      {showUploadModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white p-6 border-b border-gray-200 flex items-center justify-between rounded-t-2xl">
-              <div>
-                <h3 className="text-2xl font-bold text-gray-900">Upload Invoice Data</h3>
-                <p className="text-sm text-gray-600 mt-1">Upload CSV file from Amazon Vendor Central</p>
-              </div>
-              <button
-                onClick={() => setShowUploadModal(false)}
-                className="p-2 hover:bg-gray-100 rounded-lg transition"
-              >
-                <X className="w-5 h-5 text-gray-500" />
-              </button>
-            </div>
-            
-            <div className="p-6 space-y-6">
-              {/* Upload Area */}
-              <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-blue-500 transition">
-                <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-lg font-semibold text-gray-900 mb-2">Drop your invoice CSV here</p>
-                <p className="text-sm text-gray-600 mb-4">or click to browse</p>
-                <input 
-                  type="file" 
-                  accept=".csv,.xlsx" 
-                  className="hidden" 
-                  id="invoice-upload"
-                  onChange={handleFileUpload}
-                />
-                <label htmlFor="invoice-upload" className="inline-block px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition cursor-pointer font-medium">
-                  Choose File
-                </label>
-                <p className="text-xs text-gray-500 mt-4">Supported formats: CSV, Excel (.xlsx)</p>
-              </div>
+        .btn-secondary {
+            background: #f3f4f6;
+            color: #374151;
+        }
 
-              {/* Required Columns */}
-              <div className="bg-blue-50 rounded-xl p-4 border border-blue-200">
-                <h4 className="font-semibold text-blue-900 mb-2">Required Columns:</h4>
-                <div className="grid grid-cols-2 gap-2 text-sm text-blue-800">
-                  <div>• Order ID</div>
-                  <div>• Invoice ID</div>
-                  <div>• ASIN</div>
-                  <div>• SKU</div>
-                  <div>• Item Title</div>
-                  <div>• Quantity</div>
-                  <div>• Item Cost (Selling Price)</div>
-                  <div>• Invoice Date</div>
-                </div>
-              </div>
+        .btn-secondary:hover {
+            background: #e5e7eb;
+        }
 
-              {/* ASIN Cost Mapping Upload */}
-              <div className="border-t pt-6">
-                <h4 className="font-semibold text-gray-900 mb-4">Upload ASIN Cost Mapping (Optional)</h4>
-                <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center">
-                  <Package className="w-10 h-10 text-gray-400 mx-auto mb-3" />
-                  <p className="text-sm font-medium text-gray-700 mb-2">Upload ASIN vs Purchase Cost</p>
-                  <input type="file" accept=".csv,.xlsx" className="hidden" id="cost-upload" />
-                  <label htmlFor="cost-upload" className="inline-block px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition cursor-pointer text-sm font-medium">
-                    Choose File
-                  </label>
-                  <p className="text-xs text-gray-500 mt-2">Format: ASIN, Cost</p>
-                </div>
-              </div>
+        .badge {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
 
-              <div className="flex gap-3">
-                <button 
-                  onClick={() => setShowUploadModal(false)}
-                  className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition font-semibold"
-                >
-                  Cancel
-                </button>
-                <button className="flex-1 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 transition font-semibold shadow-md">
-                  Upload & Process
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+        .badge-syncing {
+            background: #dbeafe;
+            color: #1e40af;
+            border: 1px solid #93c5fd;
+        }
 
-      {/* Quick Entry Modal */}
-      {showQuickEntry && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
-            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
-              <h3 className="text-2xl font-bold text-gray-900">Add Daily Expenses</h3>
-              <button onClick={() => setShowQuickEntry(false)} className="p-2 hover:bg-gray-100 rounded-lg transition">
-                <X className="w-5 h-5 text-gray-500" />
-              </button>
-            </div>
-            
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Date</label>
-                <input
-                  type="date"
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  defaultValue={new Date().toISOString().split('T')[0]}
-                />
-              </div>
+        .badge-success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #6ee7b7;
+        }
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Advertising Spend</label>
-                <div className="relative">
-                  <span className="absolute left-4 top-3 text-gray-500">₹</span>
-                  <input
-                    type="number"
-                    placeholder="0.00"
-                    className="w-full pl-8 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
+        .badge-error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fca5a5;
+        }
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">CCOGS (Product Discounts)</label>
-                <div className="relative">
-                  <span className="absolute left-4 top-3 text-gray-500">₹</span>
-                  <input
-                    type="number"
-                    placeholder="0.00"
-                    className="w-full pl-8 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
+        .tabs {
+            border-top: 1px solid #e5e7eb;
+            display: flex;
+            gap: 1rem;
+            overflow-x: auto;
+        }
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">VRET (Returns from FC)</label>
-                <div className="relative">
-                  <span className="absolute left-4 top-3 text-gray-500">₹</span>
-                  <input
-                    type="number"
-                    placeholder="0.00"
-                    className="w-full pl-8 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
+        .tab {
+            padding: 1rem;
+            font-weight: 600;
+            border-bottom: 2px solid transparent;
+            cursor: pointer;
+            white-space: nowrap;
+            text-transform: capitalize;
+            color: #6b7280;
+            background: none;
+            border-top: none;
+            border-left: none;
+            border-right: none;
+        }
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Freight to FC</label>
-                <div className="relative">
-                  <span className="absolute left-4 top-3 text-gray-500">₹</span>
-                  <input
-                    type="number"
-                    placeholder="0.00"
-                    className="w-full pl-8 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <p className="text-xs text-gray-500 mt-1">Allocated across invoices proportionally</p>
-              </div>
+        .tab:hover {
+            color: #111827;
+        }
 
-              <button className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-3 rounded-xl hover:from-blue-700 hover:to-blue-800 transition font-semibold shadow-md">
-                Save Expenses
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
+        .tab.active {
+            color: #3b82f6;
+            border-bottom-color: #3b82f6;
+        }
 
-export default VendorPnLDashboard;
+        .main-content {
+            padding: 2rem 0;
+        }
+
+        .filter-bar {
+            background: white;
+            border-radius: 1rem;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            border: 1px solid #f3f4f6;
+        }
+
+        .filter-content {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .filter-inputs {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .input, select {
+            padding: 0.5rem 0.75rem;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+            background: white;
+        }
+
+        .input:focus, select:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .grid {
+            display: grid;
+            gap: 1.5rem;
+        }
+
+        .grid-4 {
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        }
+
+        .grid-3 {
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        }
+
+        .card {
+            background: white;
+            border-radius: 1rem;
+            padding: 1.5rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            border: 1px solid #f3f4f6;
+            transition: all 0.3s;
+        }
+
+        .card:hover {
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .metric-card {
+            position: relative;
+        }
+
+        .metric-header {
+            display: flex;
+            align-items: start;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+        }
+
+        .metric-icon {
+            padding: 0.75rem;
+            border-radius: 0.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .metric-icon svg {
+            width: 1.5rem;
+            height: 1.5rem;
+            color: white;
+        }
+
+        .trend-badge {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .trend-up {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .trend-down {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .metric-title {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #6b7280;
+            margin-bottom: 0.5rem;
+        }
+
+        .metric-value {
+            font-size: 1.875rem;
+            font-weight: 700;
+            color: #111827;
+        }
+
+        .metric-subtitle {
+            font-size: 0.75rem;
+            color: #9ca3af;
+            margin-top: 0.25rem;
+        }
+
+        .gradient-card {
+            background: linear-gradient(135deg, var(--from), var(--to));
+            color: white;
+        }
+
+        .table-container {
+            overflow-x: auto;
+            margin-top: 1.5rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead {
+            background: #f9fafb;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        th {
+            padding: 1rem;
+            text-align: left;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #6b7280;
+            text-transform: uppercase;
+        }
+
+        td {
+            padding: 1rem;
+            border-bottom: 1px solid #f3f4f6;
+        }
+
+        tr:hover {
+            background: #f9fafb;
+        }
+
+        .status-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.875rem;
+            font-weight: 700;
+        }
+
+        .badge-high {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .badge-medium {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .badge-low {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.5);
+            backdrop-filter: blur(4px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            padding: 1rem;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 1rem;
+            max-width: 600px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);
+        }
+
+        .modal-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .modal-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        .modal-body {
+            padding: 1.5rem;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 0.5rem;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.75rem;
+            font-size: 0.875rem;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .upload-area {
+            border: 2px dashed #d1d5db;
+            border-radius: 0.75rem;
+            padding: 2rem;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+
+        .upload-area:hover {
+            border-color: #3b82f6;
+        }
+
+        .alert-card {
+            border-left: 4px solid;
+        }
+
+        .alert-low {
+            border-left-color: #ef4444;
+        }
+
+        .alert-high {
+            border-left-color: #10b981;
+        }
+
+        .search-box {
+            position: relative;
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .search-box svg {
+            position: absolute;
+            left: 0.75rem;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 1.25rem;
+            height: 1.25rem;
+            color: #9ca3af;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding-left: 2.5rem;
+        }
+
+        .spin {
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        @media (max-width: 768px) {
+            .header-content {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .header-actions {
+                justify-content: center;
+            }
+
+            .grid-4, .grid-3 {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script>
+        const { useState, useEffect, useMemo } = React;
+        const { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } = Recharts;
+
+        // ASIN Cost Mapping
+        const asinCostMapping = {
+            'B0FQ2DKLBZ': 950,
+            'B0DXK2LP5M': 180,
+            'B0CBN7X3V1': 450,
+            'B0FLKBTVPM': 85,
+            'B0FM454VC4': 1450,
+            'B0FHHNK55H': 580,
+            'B0C72QSYTL': 970,
+            'B0FC687JRP': 75,
+            'B0F9VJTFS5': 220,
+            'B0CLGJ1Y46': 550,
+            'B0F9VJ3T51': 650,
+            'B0DSKK7CZX': 115,
+        };
+
+        // Sample CSV Data
+        const sampleCSVData = [
+            { 'Order ID': 'TCb7hhcVk', 'Invoice ID': 'GT/437', 'Invoice date': '28 Oct 2025', ASIN: 'B0FQ2DKLBZ', SKU: 'transparent white drawer 4 layer', 'Item Title': 'TEX-RO Plastic Wardrobe', Quantity: '1', 'Item Cost': '₹1,206.99' },
+            { 'Order ID': 'TXyGt1YKk', 'Invoice ID': 'GT/437', 'Invoice date': '28 Oct 2025', ASIN: 'B0DXK2LP5M', SKU: 'jolly basket pack of 6', 'Item Title': 'TEX-RO Storage Box', Quantity: '1', 'Item Cost': '₹226.55' },
+            { 'Order ID': 'TNYgWhcMk', 'Invoice ID': 'GT/437', 'Invoice date': '28 Oct 2025', ASIN: 'B0CBN7X3V1', SKU: 'dish racks', 'Item Title': 'TEX-RO Utensils Basket', Quantity: '35', 'Item Cost': '₹594.00' },
+            { 'Order ID': 'TDef123Mk', 'Invoice ID': 'GT/438', 'Invoice date': '29 Oct 2025', ASIN: 'B0FLKBTVPM', SKU: 'small basket red', 'Item Title': 'TEX-RO Compact Basket', Quantity: '12', 'Item Cost': '₹105.50' },
+            { 'Order ID': 'TABC456Mk', 'Invoice ID': 'GT/439', 'Invoice date': '29 Oct 2025', ASIN: 'B0FM454VC4', SKU: 'premium storage xl', 'Item Title': 'TEX-RO Premium XL Storage', Quantity: '3', 'Item Cost': '₹1,899.00' },
+        ];
+
+        const expenseData = {
+            advertising: 85000,
+            ccogs: 25000,
+            vret: 15000,
+            freightPerInvoice: 30000
+        };
+
+        function VendorDashboard() {
+            const [activeTab, setActiveTab] = useState('overview');
+            const [selectedVendor, setSelectedVendor] = useState('etrade');
+            const [dateRange, setDateRange] = useState({ start: '2025-10-01', end: '2025-10-31' });
+            const [syncStatus, setSyncStatus] = useState('idle');
+            const [lastSyncTime, setLastSyncTime] = useState(null);
+            const [syncedRecords, setSyncedRecords] = useState(new Set());
+            const [autoSync, setAutoSync] = useState(false);
+            const [searchTerm, setSearchTerm] = useState('');
+            const [sortBy, setSortBy] = useState('margin');
+            const [showUploadModal, setShowUploadModal] = useState(false);
+            const [showExpenseModal, setShowExpenseModal] = useState(false);
+
+            const vendors = [
+                { id: 'etrade', name: 'Etrade' },
+                { id: 'retailez', name: 'Retailez' },
+                { id: 'clicktech', name: 'Clicktech' }
+            ];
+
+            // Parse invoice data
+            const parseInvoiceData = (csvData) => {
+                const invoices = {};
+                const asinMetrics = {};
+                
+                csvData.forEach(row => {
+                    const asin = row.ASIN;
+                    const invoiceId = row['Invoice ID'];
+                    const quantity = parseInt(row.Quantity);
+                    const sellingPrice = parseFloat(row['Item Cost'].replace(/[₹,]/g, ''));
+                    const cost = asinCostMapping[asin] || 0;
+                    
+                    if (!invoices[invoiceId]) {
+                        invoices[invoiceId] = {
+                            invoiceId,
+                            date: row['Invoice date'],
+                            items: [],
+                            totalRevenue: 0,
+                            totalCost: 0,
+                            synced: syncedRecords.has(`invoice-${invoiceId}`)
+                        };
+                    }
+                    
+                    invoices[invoiceId].totalRevenue += sellingPrice * quantity;
+                    invoices[invoiceId].totalCost += cost * quantity;
+                    
+                    if (!asinMetrics[asin]) {
+                        asinMetrics[asin] = {
+                            asin,
+                            sku: row.SKU,
+                            title: row['Item Title'],
+                            cost,
+                            units: 0,
+                            revenue: 0,
+                            cogs: 0,
+                            synced: syncedRecords.has(`asin-${asin}`)
+                        };
+                    }
+                    
+                    asinMetrics[asin].units += quantity;
+                    asinMetrics[asin].revenue += sellingPrice * quantity;
+                    asinMetrics[asin].cogs += cost * quantity;
+                });
+                
+                return { invoices: Object.values(invoices), asinMetrics: Object.values(asinMetrics) };
+            };
+
+            const { invoices, asinMetrics } = useMemo(() => parseInvoiceData(sampleCSVData), [syncedRecords]);
+
+            const calculateMetrics = (data, type = 'asin') => {
+                const totalRevenue = data.reduce((sum, item) => sum + item.revenue, 0);
+                
+                return data.map(item => {
+                    const revenueShare = item.revenue / totalRevenue;
+                    const allocatedAd = expenseData.advertising * revenueShare;
+                    const allocatedCCOGS = expenseData.ccogs * revenueShare;
+                    const allocatedVRET = expenseData.vret * revenueShare;
+                    const allocatedFreight = type === 'invoice' ? expenseData.freightPerInvoice / invoices.length : expenseData.freightPerInvoice * revenueShare;
+                    
+                    const grossProfit = item.revenue - item.cogs;
+                    const totalExpenses = allocatedAd + allocatedCCOGS + allocatedVRET + allocatedFreight;
+                    const netProfit = grossProfit - totalExpenses;
+                    const margin = ((netProfit / item.revenue) * 100).toFixed(2);
+                    const roi = ((netProfit / item.cogs) * 100).toFixed(2);
+                    
+                    return {
+                        ...item,
+                        grossProfit,
+                        allocatedAd,
+                        allocatedCCOGS,
+                        allocatedVRET,
+                        allocatedFreight,
+                        totalExpenses,
+                        netProfit,
+                        margin: parseFloat(margin),
+                        roi: parseFloat(roi)
+                    };
+                });
+            };
+
+            const asinWithMetrics = useMemo(() => calculateMetrics(asinMetrics, 'asin'), [asinMetrics]);
+            const invoiceWithMetrics = useMemo(() => calculateMetrics(invoices.map(inv => ({
+                ...inv,
+                revenue: inv.totalRevenue,
+                cogs: inv.totalCost
+            })), 'invoice'), [invoices]);
+
+            const syncToGoogleSheets = async () => {
+                setSyncStatus('syncing');
+                
+                try {
+                    const syncData = {
+                        vendor: selectedVendor,
+                        dateRange,
+                        timestamp: new Date().toISOString(),
+                        asinData: asinWithMetrics,
+                        invoiceData: invoiceWithMetrics,
+                        expenses: expenseData
+                    };
+
+                    await fetch('https://script.google.com/macros/s/AKfycbwal3bIh65hnWv09vsLv7tH0PCH9h2l8OjCYUJjVbwLK09-qceZjM_m8bzRMEq4VPPdng/exec', {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(syncData)
+                    });
+
+                    const newSyncedRecords = new Set(syncedRecords);
+                    asinWithMetrics.forEach(a => newSyncedRecords.add(`asin-${a.asin}`));
+                    invoiceWithMetrics.forEach(inv => newSyncedRecords.add(`invoice-${inv.invoiceId}`));
+                    setSyncedRecords(newSyncedRecords);
+                    
+                    setSyncStatus('success');
+                    setLastSyncTime(new Date());
+                    setTimeout(() => setSyncStatus('idle'), 3000);
+                } catch (error) {
+                    setSyncStatus('error');
+                    setTimeout(() => setSyncStatus('idle'), 3000);
+                }
+            };
+
+            const highMargin = asinWithMetrics.filter(a => a.margin >= 20);
+            const mediumMargin = asinWithMetrics.filter(a => a.margin >= 10 && a.margin < 20);
+            const lowMargin = asinWithMetrics.filter(a => a.margin < 10);
+            const lowROI = asinWithMetrics.filter(a => a.roi < 15);
+            const highROI = asinWithMetrics.filter(a => a.roi >= 30);
+
+            const marginDistributionData = [
+                { name: 'High (≥20%)', value: highMargin.length, fill: '#10b981' },
+                { name: 'Medium (10-20%)', value: mediumMargin.length, fill: '#f59e0b' },
+                { name: 'Low (<10%)', value: lowMargin.length, fill: '#ef4444' }
+            ];
+
+            const topASINsData = asinWithMetrics
+                .sort((a, b) => b.netProfit - a.netProfit)
+                .slice(0, 10)
+                .map(a => ({ name: a.sku.substring(0, 15), profit: a.netProfit }));
+
+            useEffect(() => {
+                lucide.createIcons();
+            }, [activeTab, syncStatus]);
+
+            return React.createElement('div', null,
+                // Header
+                React.createElement('div', { className: 'header' },
+                    React.createElement('div', { className: 'container' },
+                        React.createElement('div', { className: 'header-content' },
+                            React.createElement('div', { className: 'header-title' },
+                                React.createElement('div', { className: 'logo' },
+                                    React.createElement('i', { 'data-lucide': 'bar-chart-3' })
+                                ),
+                                React.createElement('div', { className: 'title-text' },
+                                    React.createElement('h1', null, 'Vendor Central Analytics'),
+                                    React.createElement('p', null, 'Invoice & ASIN-level P&L monitoring')
+                                )
+                            ),
+                            React.createElement('div', { className: 'header-actions' },
+                                syncStatus === 'syncing' && React.createElement('div', { className: 'badge badge-syncing' },
+                                    React.createElement('i', { 'data-lucide': 'refresh-cw', className: 'spin' }),
+                                    'Syncing...'
+                                ),
+                                syncStatus === 'success' && React.createElement('div', { className: 'badge badge-success' },
+                                    React.createElement('i', { 'data-lucide': 'check-circle' }),
+                                    'Synced!'
+                                ),
+                                lastSyncTime && React.createElement('div', { style: { fontSize: '0.75rem', color: '#6b7280' } },
+                                    `Last synced: ${lastSyncTime.toLocaleTimeString()}`
+                                ),
+                                React.createElement('button', {
+                                    className: 'btn btn-primary',
+                                    onClick: syncToGoogleSheets,
+                                    disabled: syncStatus === 'syncing'
+                                },
+                                    React.createElement('i', { 'data-lucide': 'cloud' }),
+                                    'Sync to Sheets'
+                                ),
+                                React.createElement('button', {
+                                    className: 'btn btn-success',
+                                    onClick: () => setShowUploadModal(true)
+                                },
+                                    React.createElement('i', { 'data-lucide': 'upload' }),
+                                    'Upload Invoice'
+                                ),
+                                React.createElement('button', {
+                                    className: 'btn btn-primary',
+                                    onClick: () => setShowExpenseModal(true)
+                                },
+                                    React.createElement('i', { 'data-lucide': 'plus' }),
+                                    'Add Expense'
+                                )
+                            )
+                        ),
+                        React.createElement('div', { className: 'tabs' },
+                            ['overview', 'asin-analysis', 'invoice-analysis', 'charts', 'roi-alerts'].map(tab =>
+                                React.createElement('button', {
+                                    key: tab,
+                                    className: `tab ${activeTab === tab ? 'active' : ''}`,
+                                    onClick: () => setActiveTab(tab)
+                                },
+                                    tab.replace('-', ' ')
+                                )
+                            )
+                        )
+                    )
+                ),
+                
+                // Main Content
+                React.createElement('div', { className: 'container main-content' },
+                    // Filter Bar
+                    React.createElement('div', { className: 'filter-bar' },
+                        React.createElement('div', { className: 'filter-content' },
+                            React.createElement('div', { className: 'filter-inputs' },
+                                React.createElement('i', { 'data-lucide': 'calendar' }),
+                                React.createElement('input', {
+                                    type: 'date',
+                                    className: 'input',
+                                    value: dateRange.start,
+                                    onChange: (e) => setDateRange({...dateRange, start: e.target.value})
+                                }),
+                                React.createElement('span', null, 'to'),
+                                React.createElement('input', {
+                                    type: 'date',
+                                    className: 'input',
+                                    value: dateRange.end,
+                                    onChange: (e) => setDateRange({...dateRange, end: e.target.value})
+                                }),
+                                React.createElement('select', {
+                                    value: selectedVendor,
+                                    onChange: (e) => setSelectedVendor(e.target.value)
+                                },
+                                    vendors.map(v => React.createElement('option', { key: v.id, value: v.id }, v.name))
+                                )
+                            ),
+                            React.createElement('div', { style: { fontSize: '0.875rem', color: '#6b7280' } },
+                                React.createElement('i', { 'data-lucide': 'check', style: { width: '1rem', height: '1rem', color: '#10b981', display: 'inline' } }),
+                                ` ${syncedRecords.size} records synced`
+                            )
+                        )
+                    ),
+
+                    // Overview Tab
+                    activeTab === 'overview' && React.createElement('div', null,
+                        React.createElement('div', { className: 'grid grid-4', style: { marginBottom: '2rem' } },
+                            React.createElement('div', { className: 'card metric-card' },
+                                React.createElement('div', { className: 'metric-header' },
+                                    React.createElement('div', {
+                                        className: 'metric-icon',
+                                        style: { background: 'linear-gradient(135deg, #10b981, #059669)' }
+                                    },
+                                        React.createElement('i', { 'data-lucide': 'dollar-sign' })
+                                    ),
+                                    React.createElement('div', { className: 'trend-badge trend-up' },
+                                        React.createElement('i', { 'data-lucide': 'trending-up' }),
+                                        '12.5%'
+                                    )
+                                ),
+                                React.createElement('div', { className: 'metric-title' }, 'Total Revenue'),
+                                React.createElement('div', { className: 'metric-value' },
+                                    `₹${asinWithMetrics.reduce((s, a) => s + a.revenue, 0).toLocaleString('en-IN')}`
+                                ),
+                                React.createElement('div', { className: 'metric-subtitle' }, 'From all orders')
+                            ),
+                            React.createElement('div', { className: 'card metric-card' },
+                                React.createElement('div', { className: 'metric-header' },
+                                    React.createElement('div', {
+                                        className: 'metric-icon',
+                                        style: { background: 'linear-gradient(135deg, #3b82f6, #2563eb)' }
+                                    },
+                                        React.createElement('i', { 'data-lucide': 'trending-up' })
+                                    ),
+                                    React.createElement('div', { className: 'trend-badge trend-up' },
+                                        React.createElement('i', { 'data-lucide': 'trending-up' }),
+                                        '8.3%'
+                                    )
+                                ),
+                                React.createElement('div', { className: 'metric-title' }, 'Net Profit'),
+                                React.createElement('div', { className: 'metric-value' },
+                                    `₹${asinWithMetrics.reduce((s, a) => s + a.netProfit, 0).toLocaleString('en-IN')}`
+                                )
+                            ),
+                            React.createElement('div', { className: 'card metric-card' },
+                                React.createElement('div', { className: 'metric-header' },
+                                    React.createElement('div', {
+                                        className: 'metric-icon',
+                                        style: { background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)' }
+                                    },
+                                        React.createElement('i', { 'data-lucide': 'shopping-cart' })
+                                    )
+                                ),
+                                React.createElement('div', { className: 'metric-title' }, 'Active ASINs'),
+                                React.createElement('div', { className: 'metric-value' }, asinWithMetrics.length),
+                                React.createElement('div', { className: 'metric-subtitle' }, `${highMargin.length} high margin`)
+                            ),
+                            React.createElement('div', { className: 'card metric-card' },
+                                React.createElement('div', { className: 'metric-header' },
+                                    React.createElement('div', {
+                                        className: 'metric-icon',
+                                        style: { background: 'linear-gradient(135deg, #f97316, #ea580c)' }
+                                    },
+                                        React.createElement('i', { 'data-lucide': 'bar-chart-3' })
+                                    )
+                                ),
+                                React.createElement('div', { className: 'metric-title' }, 'Avg ROI'),
+                                React.createElement('div', { className: 'metric-value' },
+                                    `${(asinWithMetrics.reduce((s, a) => s + a.roi, 0) / asinWithMetrics.length).toFixed(1)}%`
+                                )
+                            )
+                        ),
+                        React.createElement('div', { className: 'grid grid-3' },
+                            React.createElement('div', {
+                                className: 'gradient-card card',
+                                style: { '--from': '#10b981', '--to': '#059669' }
+                            },
+                                React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' } },
+                                    React.createElement('h3', { style: { fontSize: '1.125rem', fontWeight: '600' } }, 'High Margin'),
+                                    React.createElement('i', { 'data-lucide': 'check-circle' })
+                                ),
+                                React.createElement('p', { style: { fontSize: '2.25rem', fontWeight: '700', marginBottom: '0.5rem' } }, highMargin.length),
+                                React.createElement('p', { style: { opacity: 0.9, fontSize: '0.875rem' } }, 'ASINs ≥20% margin')
+                            ),
+                            React.createElement('div', {
+                                className: 'gradient-card card',
+                                style: { '--from': '#f59e0b', '--to': '#d97706' }
+                            },
+                                React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' } },
+                                    React.createElement('h3', { style: { fontSize: '1.125rem', fontWeight: '600' } }, 'Medium Margin'),
+                                    React.createElement('i', { 'data-lucide': 'bar-chart-3' })
+                                ),
+                                React.createElement('p', { style: { fontSize: '2.25rem', fontWeight: '700', marginBottom: '0.5rem' } }, mediumMargin.length),
+                                React.createElement('p', { style: { opacity: 0.9, fontSize: '0.875rem' } }, 'ASINs 10-20% margin')
+                            ),
+                            React.createElement('div', {
+                                className: 'gradient-card card',
+                                style: { '--from': '#ef4444', '--to': '#dc2626' }
+                            },
+                                React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' } },
+                                    React.createElement('h3', { style: { fontSize: '1.125rem', fontWeight: '600' } }, 'Low Margin'),
+                                    React.createElement('i', { 'data-lucide': 'alert-triangle' })
+                                ),
+                                React.createElement('p', { style: { fontSize: '2.25rem', fontWeight: '700', marginBottom: '0.5rem' } }, lowMargin.length),
+                                React.createElement('p', { style: { opacity: 0.9, fontSize: '0.875rem' } }, 'ASINs <10% margin')
+                            )
+                        )
+                    ),
+
+                    // ASIN Analysis Tab
+                    activeTab === 'asin-analysis' && React.createElement('div', { className: 'card' },
+                        React.createElement('div', { style: { display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap' } },
+                            React.createElement('div', { className: 'search-box' },
+                                React.createElement('i', { 'data-lucide': 'search' }),
+                                React.createElement('input', {
+                                    type: 'text',
+                                    className: 'form-input',
+                                    placeholder: 'Search ASIN or SKU...',
+                                    value: searchTerm,
+                                    onChange: (e) => setSearchTerm(e.target.value)
+                                })
+                            ),
+                            React.createElement('select', {
+                                value: sortBy,
+                                onChange: (e) => setSortBy(e.target.value),
+                                className: 'input'
+                            },
+                                React.createElement('option', { value: 'margin' }, 'Sort by Margin'),
+                                React.createElement('option', { value: 'roi' }, 'Sort by ROI'),
+                                React.createElement('option', { value: 'revenue' }, 'Sort by Revenue'),
+                                React.createElement('option', { value: 'units' }, 'Sort by Units')
+                            )
+                        ),
+                        React.createElement('div', { className: 'table-container' },
+                            React.createElement('table', null,
+                                React.createElement('thead', null,
+                                    React.createElement('tr', null,
+                                        ['ASIN', 'Product', 'Units', 'Revenue', 'Net Profit', 'Margin %', 'ROI %'].map(h =>
+                                            React.createElement('th', { key: h }, h)
+                                        )
+                                    )
+                                ),
+                                React.createElement('tbody', null,
+                                    asinWithMetrics
+                                        .filter(a => a.asin.toLowerCase().includes(searchTerm.toLowerCase()) || a.sku.toLowerCase().includes(searchTerm.toLowerCase()))
+                                        .sort((a, b) => {
+                                            if (sortBy === 'margin') return b.margin - a.margin;
+                                            if (sortBy === 'roi') return b.roi - a.roi;
+                                            if (sortBy === 'revenue') return b.revenue - a.revenue;
+                                            if (sortBy === 'units') return b.units - a.units;
+                                            return 0;
+                                        })
+                                        .map(asin => React.createElement('tr', { key: asin.asin },
+                                            React.createElement('td', null,
+                                                React.createElement('div', { style: { fontWeight: '600' } }, asin.asin),
+                                                React.createElement('div', { style: { fontSize: '0.75rem', color: '#6b7280' } }, asin.sku)
+                                            ),
+                                            React.createElement('td', { style: { maxWidth: '300px' } }, asin.title),
+                                            React.createElement('td', { style: { textAlign: 'center', fontWeight: '600' } }, asin.units),
+                                            React.createElement('td', { style: { textAlign: 'right', fontWeight: '700' } }, `₹${asin.revenue.toLocaleString('en-IN')}`),
+                                            React.createElement('td', { style: { textAlign: 'right', fontWeight: '700' } }, `₹${asin.netProfit.toLocaleString('en-IN')}`),
+                                            React.createElement('td', null,
+                                                React.createElement('span', {
+                                                    className: `status-badge ${asin.margin >= 20 ? 'badge-high' : asin.margin >= 10 ? 'badge-medium' : 'badge-low'}`
+                                                }, `${asin.margin}%`)
+                                            ),
+                                            React.createElement('td', null,
+                                                React.createElement('span', { className: 'status-badge', style: { background: '#f3e8ff', color: '#7c3aed' } },
+                                                    `${asin.roi}%`
+                                                )
+                                            )
+                                        ))
+                                )
+                            )
+                        )
+                    ),
+
+                    // Charts Tab
+                    activeTab === 'charts' && React.createElement('div', { className: 'grid grid-3' },
+                        React.createElement('div', { className: 'card' },
+                            React.createElement('h3', { style: { fontSize: '1.125rem', fontWeight: '700', marginBottom: '1rem' } }, 'Margin Distribution'),
+                            React.createElement(ResponsiveContainer, { width: '100%', height: 300 },
+                                React.createElement(PieChart, null,
+                                    React.createElement(Pie, {
+                                        data: marginDistributionData,
+                                        dataKey: 'value',
+                                        nameKey: 'name',
+                                        cx: '50%',
+                                        cy: '50%',
+                                        outerRadius: 100,
+                                        label: true
+                                    })
+                                )
+                            )
+                        ),
+                        React.createElement('div', { className: 'card' },
+                            React.createElement('h3', { style: { fontSize: '1.125rem', fontWeight: '700', marginBottom: '1rem' } }, 'Top 10 ASINs by Profit'),
+                            React.createElement(ResponsiveContainer, { width: '100%', height: 300 },
+                                React.createElement(BarChart, { data: topASINsData },
+                                    React.createElement(CartesianGrid, { strokeDasharray: '3 3' }),
+                                    React.createElement(XAxis, { dataKey: 'name', angle: -45, textAnchor: 'end', height: 100 }),
+                                    React.createElement(YAxis, null),
+                                    React.createElement(Tooltip, null),
+                                    React.createElement(Bar, { dataKey: 'profit', fill: '#3b82f6' })
+                                )
+                            )
+                        )
+                    )
+                ),
+
+                // Upload Modal
+                showUploadModal && React.createElement('div', { className: 'modal', onClick: () => setShowUploadModal(false) },
+                    React.createElement('div', { className: 'modal-content', onClick: (e) => e.stopPropagation() },
+                        React.createElement('div', { className: 'modal-header' },
+                            React.createElement('h3', { className: 'modal-title' }, 'Upload Invoice Data'),
+                            React.createElement('button', { className: 'btn btn-secondary', onClick: () => setShowUploadModal(false) }, '×')
+                        ),
+                        React.createElement('div', { className: 'modal-body' },
+                            React.createElement('div', { className: 'upload-area' },
+                                React.createElement('i', { 'data-lucide': 'upload', style: { width: '3rem', height: '3rem', margin: '0 auto 1rem', color: '#9ca3af' } }),
+                                React.createElement('p', { style: { fontSize: '1.125rem', fontWeight: '600', marginBottom: '0.5rem' } }, 'Drop your CSV here'),
+                                React.createElement('input', { type: 'file', accept: '.csv', style: { display: 'none' }, id: 'file-upload' }),
+                                React.createElement('label', { htmlFor: 'file-upload', className: 'btn btn-primary', style: { marginTop: '1rem', cursor: 'pointer' } }, 'Choose File')
+                            )
+                        )
+                    )
+                ),
+
+                // Expense Modal
+                showExpenseModal && React.createElement('div', { className: 'modal', onClick: () => setShowExpenseModal(false) },
+                    React.createElement('div', { className: 'modal-content', onClick: (e) => e.stopPropagation() },
+                        React.createElement('div', { className: 'modal-header' },
+                            React.createElement('h3', { className: 'modal-title' }, 'Add Daily Expenses'),
+                            React.createElement('button', { className: 'btn btn-secondary', onClick: () => setShowExpenseModal(false) }, '×')
+                        ),
+                        React.createElement('div', { className: 'modal-body' },
+                            React.createElement('div', { className: 'form-group' },
+                                React.createElement('label', { className: 'form-label' }, 'Advertising Spend'),
+                                React.createElement('input', { type: 'number', className: 'form-input', placeholder: '0.00' })
+                            ),
+                            React.createElement('button', { className: 'btn btn-primary', style: { width: '100%' } }, 'Save Expenses')
+                        )
+                    )
+                )
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(React.createElement(VendorDashboard));
+    </script>
+</body>
+</html>
