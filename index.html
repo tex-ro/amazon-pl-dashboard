@@ -4847,7 +4847,7 @@
         const GoogleSheetsDB = {
             config: {
                 spreadsheetId: '1sOkFPyiPXvPsciScXGHfOhPc8Dg4NdmXJmtSIpprwR8', // Pre-configured
-                appsScriptUrl: 'https://script.google.com/macros/s/AKfycbxPBCPKpmxR9BTq4n4CSH4xcOyhss_jeFso4VP_PoTKBzk2MRGnmJaWWxoavoN0_Yv_/exec', // Pre-configured
+                appsScriptUrl: 'https://script.google.com/macros/s/AKfycbyqtZb6XFOqICJk-wENThgkgwVJ7Dw0SFZ5WZH3S85bOgs4XoseQJKbURBcRhc-QqhZ/exec', // Pre-configured
                 connected: true, // Auto-connect on load
                 autoSync: true // Enable auto-sync
             },
@@ -4953,24 +4953,37 @@
 
             // Load data from Google Sheets
             async loadSheet(sheetName) {
-                if (!this.config.spreadsheetId) {
-                    throw new Error('Not connected to Google Sheets');
+                if (!this.config.appsScriptUrl) {
+                    throw new Error('Apps Script URL not configured');
                 }
 
-                const url = `https://docs.google.com/spreadsheets/d/${this.config.spreadsheetId}/gviz/tq?tqx=out:json&sheet=${sheetName}`;
+                const url = `${this.config.appsScriptUrl}?action=read&sheet=${sheetName}`;
                 
                 try {
                     const response = await fetch(url);
-                    const text = await response.text();
+                    const data = await response.json();
                     
-                    // Parse Google Visualization API response
-                    const jsonString = text.substring(47, text.length - 2);
-                    const data = JSON.parse(jsonString);
+                    if (!data.success) {
+                        throw new Error(data.error || 'Failed to load data');
+                    }
                     
-                    return this.parseGoogleSheetsData(data.table);
+                    console.log(`✓ Loaded ${sheetName}:`, data.rows.length, 'rows');
+                    return data.rows;
                 } catch (error) {
                     console.error(`Error loading ${sheetName}:`, error);
-                    throw error;
+                    
+                    // Fallback to Google Visualization API (may have CORS issues on local files)
+                    console.log('Trying fallback method...');
+                    try {
+                        const vizUrl = `https://docs.google.com/spreadsheets/d/${this.config.spreadsheetId}/gviz/tq?tqx=out:json&sheet=${sheetName}`;
+                        const vizResponse = await fetch(vizUrl);
+                        const text = await vizResponse.text();
+                        const jsonString = text.substring(47, text.length - 2);
+                        const vizData = JSON.parse(jsonString);
+                        return this.parseGoogleSheetsData(vizData.table);
+                    } catch (fallbackError) {
+                        throw error; // Throw original error
+                    }
                 }
             },
 
