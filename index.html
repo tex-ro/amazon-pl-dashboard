@@ -925,9 +925,227 @@
             font-size: 0.875rem;
             margin-top: 1rem;
         }
+
+        /* Google Sheets Integration Styles */
+        .sheets-connection {
+            position: fixed;
+            top: 100px;
+            right: 20px;
+            z-index: 999;
+            background: white;
+            padding: 0.875rem 1.25rem;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-xl);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            transition: all 0.3s;
+            font-size: 0.875rem;
+        }
+
+        .sheets-connection.connected {
+            border-left: 4px solid var(--success);
+        }
+
+        .sheets-connection.disconnected {
+            border-left: 4px solid var(--danger);
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.connected {
+            background: var(--success);
+        }
+
+        .status-dot.disconnected {
+            background: var(--danger);
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .sheets-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            padding: 2rem;
+        }
+
+        .sheets-modal.active {
+            display: flex;
+        }
+
+        .sheets-modal-content {
+            background: white;
+            border-radius: var(--radius-lg);
+            padding: 2rem;
+            max-width: 700px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .integration-card {
+            background: var(--gray-50);
+            padding: 1.5rem;
+            border-radius: var(--radius);
+            margin: 1rem 0;
+            border-left: 4px solid var(--primary);
+        }
+
+        .integration-card h3 {
+            font-size: 1.125rem;
+            margin-bottom: 0.75rem;
+            color: var(--gray-900);
+        }
+
+        .integration-card ol, .integration-card ul {
+            margin-left: 1.25rem;
+            margin-top: 0.5rem;
+            line-height: 1.8;
+        }
+
+        .integration-card li {
+            margin-bottom: 0.5rem;
+        }
+
+        .code-block {
+            background: var(--gray-900);
+            color: var(--success);
+            padding: 0.75rem 1rem;
+            border-radius: var(--radius-sm);
+            font-family: 'Courier New', monospace;
+            font-size: 0.75rem;
+            overflow-x: auto;
+            margin: 0.75rem 0;
+        }
+
+        .sheets-sync-panel {
+            background: linear-gradient(135deg, #e0f2fe 0%, #dbeafe 100%);
+            padding: 1.5rem;
+            border-radius: var(--radius);
+            margin: 1.5rem 0;
+            border-left: 4px solid var(--primary);
+        }
+
+        .sync-buttons {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+            margin-top: 1rem;
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
+    <!-- Google Sheets Connection Status -->
+    <div id="sheetsConnection" class="sheets-connection disconnected">
+        <div class="status-dot disconnected"></div>
+        <span id="connectionStatus">Sheets: Off</span>
+        <button class="btn btn-primary" onclick="openSheetsSetup()" style="padding: 0.5rem 0.875rem; font-size: 0.8125rem;">
+            Setup
+        </button>
+    </div>
+
+    <!-- Google Sheets Setup Modal -->
+    <div id="sheetsSetupModal" class="sheets-modal">
+        <div class="sheets-modal-content">
+            <h2 style="margin-bottom: 1rem; background: linear-gradient(135deg, var(--primary) 0%, var(--purple) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-size: 1.75rem; font-weight: 800;">
+                🔗 Connect Google Sheets Database
+            </h2>
+            
+            <div class="integration-card">
+                <h3>📋 Step 1: Create Google Sheet</h3>
+                <ol style="font-size: 0.875rem; color: var(--gray-700);">
+                    <li>Go to <a href="https://sheets.google.com" target="_blank" style="color: var(--primary); font-weight: 600;">sheets.google.com</a></li>
+                    <li>Create new spreadsheet: "P&L Database"</li>
+                    <li>Create 3 tabs: <strong>ASIN_Master</strong>, <strong>Invoices</strong>, <strong>Advertising</strong></li>
+                </ol>
+            </div>
+
+            <div class="integration-card">
+                <h3>📊 Step 2: Add Headers (Row 1)</h3>
+                <p style="font-weight: 600; margin-bottom: 0.5rem; font-size: 0.875rem;">ASIN_Master:</p>
+                <div class="code-block">Vendor | ASIN | Price</div>
+                
+                <p style="font-weight: 600; margin-bottom: 0.5rem; margin-top: 1rem; font-size: 0.875rem;">Invoices:</p>
+                <div class="code-block">Vendor | Date | Invoice ID | ASIN | Quantity | Item Price | Freight Cost</div>
+                
+                <p style="font-weight: 600; margin-bottom: 0.5rem; margin-top: 1rem; font-size: 0.875rem;">Advertising:</p>
+                <div class="code-block">Vendor | Date | ASIN | Spend | Sales | Orders | Clicks | Impressions</div>
+            </div>
+
+            <div class="integration-card">
+                <h3>🔗 Step 3: Share Your Sheet</h3>
+                <ol style="font-size: 0.875rem; color: var(--gray-700);">
+                    <li>Click "Share" button (top right)</li>
+                    <li>Change to "Anyone with the link"</li>
+                    <li>Set permissions to "Editor"</li>
+                    <li>Copy the share link</li>
+                </ol>
+            </div>
+
+            <div style="margin: 1.5rem 0;">
+                <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; font-size: 0.875rem;">
+                    Google Sheets URL:
+                </label>
+                <input 
+                    type="url" 
+                    id="sheetsUrlInput" 
+                    placeholder="https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit"
+                    style="width: 100%; padding: 0.75rem; border: 2px solid var(--gray-200); border-radius: var(--radius-sm); font-size: 0.9375rem;">
+            </div>
+
+            <div class="integration-card" style="border-left-color: var(--warning); background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);">
+                <h3>🚀 Step 4: Enable Write Access (Optional)</h3>
+                <p style="font-size: 0.875rem; margin-bottom: 0.5rem;">For saving data back to sheets, deploy the Apps Script:</p>
+                <ol style="font-size: 0.875rem; color: var(--gray-700);">
+                    <li>In your sheet: Extensions → Apps Script</li>
+                    <li>Paste the GoogleAppsScript.gs code</li>
+                    <li>Deploy → New deployment → Web app</li>
+                    <li>Set "Who has access" to "Anyone"</li>
+                </ol>
+                <input 
+                    type="url" 
+                    id="appsScriptUrlInput" 
+                    placeholder="https://script.google.com/macros/s/.../exec (optional)"
+                    style="width: 100%; padding: 0.75rem; border: 2px solid var(--gray-200); border-radius: var(--radius-sm); margin-top: 0.75rem; font-size: 0.9375rem;">
+            </div>
+
+            <div style="display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 2rem;">
+                <button class="btn btn-secondary" onclick="closeSheetsSetup()">Cancel</button>
+                <button class="btn btn-primary" onclick="connectGoogleSheets()">Connect Database</button>
+            </div>
+        </div>
+    </div>
+
     <div class="header">
         <div class="header-content">
             <div class="header-title">
@@ -1168,6 +1386,32 @@
             }
 
             html += `
+                <div class="sheets-sync-panel">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <div>
+                            <h3 style="margin: 0; font-size: 1rem; font-weight: 700; color: var(--gray-900);">📊 Google Sheets Sync</h3>
+                            <p style="margin: 0; font-size: 0.8125rem; color: var(--gray-600); margin-top: 0.25rem;">Load or save data to your cloud database</p>
+                        </div>
+                        <div id="sheetsStatusBadge" style="padding: 0.5rem 0.875rem; background: var(--gray-200); border-radius: var(--radius-sm); font-size: 0.8125rem; font-weight: 600; color: var(--gray-700);">
+                            Not Connected
+                        </div>
+                    </div>
+                    <div class="sync-buttons">
+                        <button class="btn btn-success" onclick="loadFromSheets()" style="font-size: 0.875rem;">
+                            📥 Load from Sheets
+                        </button>
+                        <button class="btn btn-primary" onclick="saveToSheets()" style="font-size: 0.875rem;">
+                            📤 Save to Sheets
+                        </button>
+                        <button class="btn btn-secondary" onclick="testSheetsConnection()" style="font-size: 0.875rem;">
+                            🔍 Test Connection
+                        </button>
+                        <button class="btn btn-gray" onclick="openSheetsSetup()" style="font-size: 0.875rem;">
+                            ⚙️ Setup
+                        </button>
+                    </div>
+                </div>
+
                 <div class="card">
                     <div class="card-header">
                         <h2 class="card-title">ASIN Master - Price Management</h2>
@@ -4594,6 +4838,404 @@
         console.log('✓ Ad spend integration complete');
         console.log('✓ Last 5 days profit tracking ready');
         console.log('✓ Top/Low performing ASINs (7 days) ready');
+
+        // ================================================
+        // GOOGLE SHEETS DATABASE INTEGRATION
+        // ================================================
+
+        const GoogleSheetsDB = {
+            config: {
+                spreadsheetId: null,
+                appsScriptUrl: null,
+                connected: false,
+                autoSync: false
+            },
+
+            // Initialize from localStorage
+            init() {
+                const saved = localStorage.getItem('googleSheetsConfig');
+                if (saved) {
+                    this.config = JSON.parse(saved);
+                    if (this.config.spreadsheetId) {
+                        this.updateUI(true);
+                        console.log('✓ Google Sheets: Connected');
+                    }
+                }
+            },
+
+            // Save configuration
+            save() {
+                localStorage.setItem('googleSheetsConfig', JSON.stringify(this.config));
+            },
+
+            // Extract spreadsheet ID from URL
+            extractSpreadsheetId(url) {
+                const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
+                return match ? match[1] : null;
+            },
+
+            // Connect to Google Sheets
+            connect(sheetUrl, appsScriptUrl = null) {
+                const spreadsheetId = this.extractSpreadsheetId(sheetUrl);
+                
+                if (!spreadsheetId) {
+                    showNotification('❌ Invalid Google Sheets URL', 'error');
+                    return false;
+                }
+
+                this.config.spreadsheetId = spreadsheetId;
+                this.config.appsScriptUrl = appsScriptUrl || null;
+                this.config.connected = true;
+                
+                this.save();
+                this.updateUI(true);
+                
+                showNotification('✅ Connected to Google Sheets!', 'success');
+                return true;
+            },
+
+            // Update UI
+            updateUI(connected) {
+                const connectionDiv = document.getElementById('sheetsConnection');
+                if (!connectionDiv) return;
+
+                const statusDot = connectionDiv.querySelector('.status-dot');
+                const statusText = document.getElementById('connectionStatus');
+                const btn = connectionDiv.querySelector('button');
+
+                if (connected) {
+                    connectionDiv.className = 'sheets-connection connected';
+                    if (statusDot) statusDot.className = 'status-dot connected';
+                    if (statusText) statusText.textContent = 'Google Sheets: Connected ✓';
+                    if (btn) btn.textContent = 'Settings';
+                } else {
+                    connectionDiv.className = 'sheets-connection disconnected';
+                    if (statusDot) statusDot.className = 'status-dot disconnected';
+                    if (statusText) statusText.textContent = 'Google Sheets: Disconnected';
+                    if (btn) btn.textContent = 'Setup Database';
+                }
+            },
+
+            // Load data from Google Sheets
+            async loadSheet(sheetName) {
+                if (!this.config.spreadsheetId) {
+                    throw new Error('Not connected to Google Sheets');
+                }
+
+                const url = `https://docs.google.com/spreadsheets/d/${this.config.spreadsheetId}/gviz/tq?tqx=out:json&sheet=${sheetName}`;
+                
+                try {
+                    const response = await fetch(url);
+                    const text = await response.text();
+                    
+                    // Parse Google Visualization API response
+                    const jsonString = text.substring(47, text.length - 2);
+                    const data = JSON.parse(jsonString);
+                    
+                    return this.parseGoogleSheetsData(data.table);
+                } catch (error) {
+                    console.error(`Error loading ${sheetName}:`, error);
+                    throw error;
+                }
+            },
+
+            // Parse Google Sheets data
+            parseGoogleSheetsData(table) {
+                const rows = table.rows;
+                if (rows.length === 0) return [];
+
+                const headers = rows[0].c.map(cell => cell ? (cell.v || '') : '');
+                
+                const data = [];
+                for (let i = 1; i < rows.length; i++) {
+                    const row = rows[i].c;
+                    const obj = {};
+                    
+                    row.forEach((cell, index) => {
+                        if (cell && cell.v !== null) {
+                            obj[headers[index]] = cell.v;
+                        }
+                    });
+                    
+                    if (Object.keys(obj).length > 0) {
+                        data.push(obj);
+                    }
+                }
+                
+                return data;
+            },
+
+            // Save data to Google Sheets (via Apps Script)
+            async saveSheet(sheetName, data) {
+                if (!this.config.appsScriptUrl) {
+                    showNotification('⚠️ Apps Script not configured. Data exported as CSV.', 'warning');
+                    return false;
+                }
+
+                try {
+                    const response = await fetch(this.config.appsScriptUrl, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            sheetName: sheetName,
+                            values: data
+                        })
+                    });
+
+                    showNotification(`✓ ${sheetName} saved to Google Sheets`, 'success');
+                    return true;
+                } catch (error) {
+                    console.error(`Error saving ${sheetName}:`, error);
+                    showNotification(`❌ Error saving ${sheetName}`, 'error');
+                    return false;
+                }
+            },
+
+            // Load ASIN Master data
+            async loadAsinMaster() {
+                try {
+                    const data = await this.loadSheet('ASIN_Master');
+                    console.log('✓ Loaded ASIN Master:', data.length, 'rows');
+                    
+                    // Clear existing data for current vendor
+                    state.asinData[state.selectedVendor] = [];
+                    
+                    // Load data for current vendor
+                    data.forEach(row => {
+                        if (row.Vendor === state.selectedVendor) {
+                            state.asinData[state.selectedVendor].push({
+                                asin: row.ASIN,
+                                price: parseFloat(row.Price) || 0
+                            });
+                        }
+                    });
+                    
+                    saveState();
+                    renderAsinTable();
+                    return data;
+                } catch (error) {
+                    console.error('Error loading ASIN Master:', error);
+                    throw error;
+                }
+            },
+
+            // Load Invoices data
+            async loadInvoices() {
+                try {
+                    const data = await this.loadSheet('Invoices');
+                    console.log('✓ Loaded Invoices:', data.length, 'rows');
+                    
+                    // Clear existing data for current vendor
+                    state.savedInvoices[state.selectedVendor] = [];
+                    
+                    data.forEach(row => {
+                        if (row.Vendor === state.selectedVendor) {
+                            state.savedInvoices[state.selectedVendor].push({
+                                date: row.Date,
+                                invoiceId: row['Invoice ID'],
+                                asin: row.ASIN,
+                                quantity: parseInt(row.Quantity) || 0,
+                                itemPrice: parseFloat(row['Item Price']) || 0
+                            });
+                            
+                            // Handle freight cost
+                            if (row['Freight Cost']) {
+                                if (!state.freightCosts[state.selectedVendor]) {
+                                    state.freightCosts[state.selectedVendor] = {};
+                                }
+                                state.freightCosts[state.selectedVendor][row['Invoice ID']] = parseFloat(row['Freight Cost']) || 0;
+                            }
+                        }
+                    });
+                    
+                    saveState();
+                    renderInvoiceTable();
+                    return data;
+                } catch (error) {
+                    console.error('Error loading Invoices:', error);
+                    throw error;
+                }
+            },
+
+            // Load Advertising data
+            async loadAdvertising() {
+                try {
+                    const data = await this.loadSheet('Advertising');
+                    console.log('✓ Loaded Advertising:', data.length, 'rows');
+                    
+                    // Clear existing data for current vendor
+                    state.advertisingData[state.selectedVendor] = [];
+                    
+                    data.forEach(row => {
+                        if (row.Vendor === state.selectedVendor) {
+                            state.advertisingData[state.selectedVendor].push({
+                                date: row.Date,
+                                asin: row.ASIN,
+                                spend: parseFloat(row.Spend) || 0,
+                                sales: parseFloat(row.Sales) || 0,
+                                orders: parseInt(row.Orders) || 0,
+                                clicks: parseInt(row.Clicks) || 0,
+                                impressions: parseInt(row.Impressions) || 0
+                            });
+                        }
+                    });
+                    
+                    saveState();
+                    renderAdvertisingTable();
+                    return data;
+                } catch (error) {
+                    console.error('Error loading Advertising:', error);
+                    throw error;
+                }
+            },
+
+            // Save all data for current vendor
+            async saveAllForVendor() {
+                if (!this.config.appsScriptUrl) {
+                    showNotification('⚠️ Write access not configured. Use CSV export instead.', 'warning');
+                    exportAllDataToCSV();
+                    return;
+                }
+
+                showNotification('📤 Saving to Google Sheets...', 'info');
+                
+                try {
+                    const vendor = state.selectedVendor;
+                    
+                    // Save ASIN Master
+                    const asinData = state.asinData[vendor] || [];
+                    const asinRows = asinData.map(item => [vendor, item.asin, item.price]);
+                    await this.saveSheet('ASIN_Master', asinRows);
+                    
+                    // Save Invoices
+                    const invoiceData = state.savedInvoices[vendor] || [];
+                    const invoiceRows = invoiceData.map(item => [
+                        vendor,
+                        item.date,
+                        item.invoiceId,
+                        item.asin,
+                        item.quantity,
+                        item.itemPrice,
+                        state.freightCosts[vendor]?.[item.invoiceId] || 0
+                    ]);
+                    await this.saveSheet('Invoices', invoiceRows);
+                    
+                    // Save Advertising
+                    const adData = state.advertisingData[vendor] || [];
+                    const adRows = adData.map(item => [
+                        vendor,
+                        item.date,
+                        item.asin,
+                        item.spend,
+                        item.sales,
+                        item.orders,
+                        item.clicks,
+                        item.impressions
+                    ]);
+                    await this.saveSheet('Advertising', adRows);
+                    
+                    showNotification('✅ All data saved successfully!', 'success');
+                } catch (error) {
+                    showNotification('❌ Error saving: ' + error.message, 'error');
+                }
+            },
+
+            // Load all data
+            async loadAll() {
+                if (!this.config.spreadsheetId) {
+                    showNotification('❌ Not connected to Google Sheets', 'error');
+                    return;
+                }
+
+                showNotification('📥 Loading from Google Sheets...', 'info');
+                
+                try {
+                    await this.loadAsinMaster();
+                    await this.loadInvoices();
+                    await this.loadAdvertising();
+                    
+                    recalculateAll();
+                    showNotification('✅ Data loaded successfully!', 'success');
+                } catch (error) {
+                    showNotification('❌ Error loading: ' + error.message, 'error');
+                }
+            },
+
+            // Test connection
+            async testConnection() {
+                if (!this.config.spreadsheetId) {
+                    showNotification('❌ Not connected', 'error');
+                    return false;
+                }
+
+                try {
+                    showNotification('🔍 Testing...', 'info');
+                    await this.loadSheet('ASIN_Master');
+                    showNotification('✅ Connection OK!', 'success');
+                    return true;
+                } catch (error) {
+                    showNotification('❌ Connection failed', 'error');
+                    return false;
+                }
+            }
+        };
+
+        // UI Functions
+        function openSheetsSetup() {
+            document.getElementById('sheetsSetupModal').classList.add('active');
+            
+            const saved = localStorage.getItem('googleSheetsConfig');
+            if (saved) {
+                const config = JSON.parse(saved);
+                if (config.spreadsheetId) {
+                    const url = `https://docs.google.com/spreadsheets/d/${config.spreadsheetId}/edit`;
+                    document.getElementById('sheetsUrlInput').value = url;
+                }
+                if (config.appsScriptUrl) {
+                    document.getElementById('appsScriptUrlInput').value = config.appsScriptUrl;
+                }
+            }
+        }
+
+        function closeSheetsSetup() {
+            document.getElementById('sheetsSetupModal').classList.remove('active');
+        }
+
+        function connectGoogleSheets() {
+            const sheetUrl = document.getElementById('sheetsUrlInput').value.trim();
+            const appsScriptUrl = document.getElementById('appsScriptUrlInput').value.trim();
+            
+            if (!sheetUrl) {
+                showNotification('❌ Please enter Google Sheets URL', 'error');
+                return;
+            }
+            
+            const success = GoogleSheetsDB.connect(sheetUrl, appsScriptUrl);
+            
+            if (success) {
+                closeSheetsSetup();
+                
+                setTimeout(() => {
+                    if (confirm('Load existing data from Google Sheets?')) {
+                        GoogleSheetsDB.loadAll();
+                    }
+                }, 500);
+            }
+        }
+
+        // Global functions
+        window.loadFromSheets = () => GoogleSheetsDB.loadAll();
+        window.saveToSheets = () => GoogleSheetsDB.saveAllForVendor();
+        window.testSheetsConnection = () => GoogleSheetsDB.testConnection();
+
+        // Initialize on page load
+        GoogleSheetsDB.init();
+        console.log('✓ Google Sheets integration ready');
+        console.log('💡 Use: loadFromSheets() to load data');
+        console.log('💡 Use: saveToSheets() to save data');
     </script>
 </body>
 </html>
