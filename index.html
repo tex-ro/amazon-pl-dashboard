@@ -4841,26 +4841,45 @@
 
         // ================================================
         // GOOGLE SHEETS DATABASE INTEGRATION
+        // PRE-CONFIGURED FOR AUTO-SYNC
         // ================================================
 
         const GoogleSheetsDB = {
             config: {
-                spreadsheetId: null,
-                appsScriptUrl: null,
-                connected: false,
-                autoSync: false
+                spreadsheetId: '1sOkFPyiPXvPsciScXGHfOhPc8Dg4NdmXJmtSIpprwR8', // Pre-configured
+                appsScriptUrl: 'https://script.google.com/macros/s/AKfycbxPBCPKpmxR9BTq4n4CSH4xcOyhss_jeFso4VP_PoTKBzk2MRGnmJaWWxoavoN0_Yv_/exec', // Pre-configured
+                connected: true, // Auto-connect on load
+                autoSync: true // Enable auto-sync
             },
 
             // Initialize from localStorage
             init() {
+                // Always save the pre-configured settings
+                this.save();
+                
                 const saved = localStorage.getItem('googleSheetsConfig');
                 if (saved) {
-                    this.config = JSON.parse(saved);
-                    if (this.config.spreadsheetId) {
-                        this.updateUI(true);
-                        console.log('✓ Google Sheets: Connected');
-                    }
+                    const loadedConfig = JSON.parse(saved);
+                    // Merge with defaults to ensure pre-configured values are used
+                    this.config = {
+                        ...this.config,
+                        ...loadedConfig
+                    };
                 }
+                
+                // Ensure we use pre-configured values if available
+                if (!this.config.spreadsheetId) {
+                    this.config.spreadsheetId = '1sOkFPyiPXvPsciScXGHfOhPc8Dg4NdmXJmtSIpprwR8';
+                }
+                if (!this.config.appsScriptUrl) {
+                    this.config.appsScriptUrl = 'https://script.google.com/macros/s/AKfycbxPBCPKpmxR9BTq4n4CSH4xcOyhss_jeFso4VP_PoTKBzk2MRGnmJaWWxoavoN0_Yv_/exec';
+                }
+                this.config.connected = true;
+                
+                // Save the final config
+                this.save();
+                
+                console.log('✓ Google Sheets: Pre-configured and connected');
             },
 
             // Save configuration
@@ -4908,11 +4927,27 @@
                     if (statusDot) statusDot.className = 'status-dot connected';
                     if (statusText) statusText.textContent = 'Google Sheets: Connected ✓';
                     if (btn) btn.textContent = 'Settings';
+                    
+                    // Update sync panel badge
+                    const badge = document.getElementById('sheetsStatusBadge');
+                    if (badge) {
+                        badge.style.background = 'var(--success)';
+                        badge.style.color = 'white';
+                        badge.textContent = 'Connected ✓';
+                    }
                 } else {
                     connectionDiv.className = 'sheets-connection disconnected';
                     if (statusDot) statusDot.className = 'status-dot disconnected';
                     if (statusText) statusText.textContent = 'Google Sheets: Disconnected';
                     if (btn) btn.textContent = 'Setup Database';
+                    
+                    // Update sync panel badge
+                    const badge = document.getElementById('sheetsStatusBadge');
+                    if (badge) {
+                        badge.style.background = 'var(--gray-200)';
+                        badge.style.color = 'var(--gray-700)';
+                        badge.textContent = 'Not Connected';
+                    }
                 }
             },
 
@@ -5000,21 +5035,28 @@
                     const data = await this.loadSheet('ASIN_Master');
                     console.log('✓ Loaded ASIN Master:', data.length, 'rows');
                     
-                    // Clear existing data for current vendor
-                    state.asinData[state.selectedVendor] = [];
+                    // Clear all vendor data first
+                    state.asinData = {
+                        etrade: [],
+                        retailez: [],
+                        clicktech: []
+                    };
                     
-                    // Load data for current vendor
+                    // Load data for ALL vendors
                     data.forEach(row => {
-                        if (row.Vendor === state.selectedVendor) {
-                            state.asinData[state.selectedVendor].push({
-                                asin: row.ASIN,
+                        const vendor = row.Vendor ? row.Vendor.toLowerCase() : '';
+                        if (state.asinData[vendor]) {
+                            state.asinData[vendor].push({
+                                asin: row.ASIN || '',
                                 price: parseFloat(row.Price) || 0
                             });
                         }
                     });
                     
-                    saveState();
-                    renderAsinTable();
+                    saveData();
+                    if (typeof renderAsinMaster === 'function') {
+                        renderAsinMaster();
+                    }
                     return data;
                 } catch (error) {
                     console.error('Error loading ASIN Master:', error);
@@ -5028,31 +5070,43 @@
                     const data = await this.loadSheet('Invoices');
                     console.log('✓ Loaded Invoices:', data.length, 'rows');
                     
-                    // Clear existing data for current vendor
-                    state.savedInvoices[state.selectedVendor] = [];
+                    // Clear all vendor data
+                    state.savedInvoices = {
+                        etrade: [],
+                        retailez: [],
+                        clicktech: []
+                    };
+                    state.freightCosts = {
+                        etrade: {},
+                        retailez: {},
+                        clicktech: {}
+                    };
                     
                     data.forEach(row => {
-                        if (row.Vendor === state.selectedVendor) {
-                            state.savedInvoices[state.selectedVendor].push({
-                                date: row.Date,
-                                invoiceId: row['Invoice ID'],
-                                asin: row.ASIN,
+                        const vendor = row.Vendor ? row.Vendor.toLowerCase() : '';
+                        if (state.savedInvoices[vendor]) {
+                            state.savedInvoices[vendor].push({
+                                date: row.Date || '',
+                                invoiceId: row['Invoice ID'] || '',
+                                asin: row.ASIN || '',
                                 quantity: parseInt(row.Quantity) || 0,
                                 itemPrice: parseFloat(row['Item Price']) || 0
                             });
                             
                             // Handle freight cost
                             if (row['Freight Cost']) {
-                                if (!state.freightCosts[state.selectedVendor]) {
-                                    state.freightCosts[state.selectedVendor] = {};
+                                if (!state.freightCosts[vendor]) {
+                                    state.freightCosts[vendor] = {};
                                 }
-                                state.freightCosts[state.selectedVendor][row['Invoice ID']] = parseFloat(row['Freight Cost']) || 0;
+                                state.freightCosts[vendor][row['Invoice ID']] = parseFloat(row['Freight Cost']) || 0;
                             }
                         }
                     });
                     
-                    saveState();
-                    renderInvoiceTable();
+                    saveData();
+                    if (typeof renderSavedInvoices === 'function') {
+                        renderSavedInvoices();
+                    }
                     return data;
                 } catch (error) {
                     console.error('Error loading Invoices:', error);
@@ -5066,14 +5120,19 @@
                     const data = await this.loadSheet('Advertising');
                     console.log('✓ Loaded Advertising:', data.length, 'rows');
                     
-                    // Clear existing data for current vendor
-                    state.advertisingData[state.selectedVendor] = [];
+                    // Clear all vendor data
+                    state.advertisingData = {
+                        etrade: [],
+                        retailez: [],
+                        clicktech: []
+                    };
                     
                     data.forEach(row => {
-                        if (row.Vendor === state.selectedVendor) {
-                            state.advertisingData[state.selectedVendor].push({
-                                date: row.Date,
-                                asin: row.ASIN,
+                        const vendor = row.Vendor ? row.Vendor.toLowerCase() : '';
+                        if (state.advertisingData[vendor]) {
+                            state.advertisingData[vendor].push({
+                                date: row.Date || '',
+                                asin: row.ASIN || '',
                                 spend: parseFloat(row.Spend) || 0,
                                 sales: parseFloat(row.Sales) || 0,
                                 orders: parseInt(row.Orders) || 0,
@@ -5083,8 +5142,10 @@
                         }
                     });
                     
-                    saveState();
-                    renderAdvertisingTable();
+                    saveData();
+                    if (typeof renderAdvertising === 'function') {
+                        renderAdvertising();
+                    }
                     return data;
                 } catch (error) {
                     console.error('Error loading Advertising:', error);
@@ -5233,8 +5294,27 @@
 
         // Initialize on page load
         GoogleSheetsDB.init();
+        
+        // Update UI immediately since we're pre-configured
+        GoogleSheetsDB.updateUI(true);
+        
+        // Auto-sync data from Google Sheets on page load
+        setTimeout(async () => {
+            if (GoogleSheetsDB.config.connected && GoogleSheetsDB.config.spreadsheetId) {
+                console.log('🔄 Auto-syncing from Google Sheets...');
+                try {
+                    await GoogleSheetsDB.loadAll();
+                    console.log('✅ Auto-sync complete!');
+                } catch (error) {
+                    console.error('❌ Auto-sync failed:', error);
+                }
+            }
+        }, 1000); // Wait 1 second after page load
+        
         console.log('✓ Google Sheets integration ready');
-        console.log('💡 Use: loadFromSheets() to load data');
+        console.log('✓ Pre-configured with your Google Sheet');
+        console.log('✓ Auto-sync enabled on page load');
+        console.log('💡 Use: loadFromSheets() to manually reload');
         console.log('💡 Use: saveToSheets() to save data');
     </script>
 </body>
