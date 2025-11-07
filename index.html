@@ -1781,7 +1781,32 @@
                         const asin = asinIndex !== -1 ? columns[asinIndex] : '';
                         const quantity = qtyIndex !== -1 ? columns[qtyIndex].replace(/,/g, '') : '';
                         const itemPrice = priceIndex !== -1 ? columns[priceIndex].replace(/[₹,$,]/g, '').trim() : '';
-                        const date = dateIndex !== -1 ? columns[dateIndex].split(' ').slice(0, 3).join(' ') : '';
+                        
+                        // Fixed date parsing to handle format: "2 Nov 2025 11:30:03 AM IST"
+                        let parsedDate = '';
+                        if (dateIndex !== -1 && columns[dateIndex]) {
+                            const dateStr = columns[dateIndex].trim();
+                            
+                            // Extract date parts: "2 Nov 2025" from "2 Nov 2025 11:30:03 AM IST"
+                            const dateParts = dateStr.split(/\s+/).filter(p => p.trim() && !p.includes(':') && !['AM', 'PM', 'IST'].includes(p));
+                            
+                            if (dateParts.length >= 3) {
+                                const day = dateParts[0];   // "2"
+                                const month = dateParts[1]; // "Nov"
+                                const year = dateParts[2];  // "2025"
+                                
+                                // Create proper date string: "Nov 2, 2025"
+                                const dateString = `${month} ${day}, ${year}`;
+                                const dateObj = new Date(dateString);
+                                
+                                // Validate the date is reasonable (not year 2001 or other weird dates)
+                                if (!isNaN(dateObj.getTime()) && dateObj.getFullYear() >= 2020 && dateObj.getFullYear() <= 2030) {
+                                    parsedDate = dateObj.toISOString().split('T')[0]; // Format: YYYY-MM-DD
+                                } else {
+                                    console.warn('Invalid date parsed:', dateString, '→', dateObj);
+                                }
+                            }
+                        }
                         
                         if (invoiceId && asin && quantity) {
                             importedData.push({
@@ -1790,7 +1815,7 @@
                                 asin,
                                 quantity,
                                 itemPrice,
-                                date: date ? new Date(date).toISOString().split('T')[0] : ''
+                                date: parsedDate
                             });
                         }
                     }
@@ -4847,7 +4872,7 @@
         const GoogleSheetsDB = {
             config: {
                 spreadsheetId: '1sOkFPyiPXvPsciScXGHfOhPc8Dg4NdmXJmtSIpprwR8', // Pre-configured
-                appsScriptUrl: 'https://script.google.com/macros/s/AKfycbyqtZb6XFOqICJk-wENThgkgwVJ7Dw0SFZ5WZH3S85bOgs4XoseQJKbURBcRhc-QqhZ/exec', // Pre-configured
+                appsScriptUrl: 'https://script.google.com/macros/s/AKfycbxPBCPKpmxR9BTq4n4CSH4xcOyhss_jeFso4VP_PoTKBzk2MRGnmJaWWxoavoN0_Yv_/exec', // Pre-configured
                 connected: true, // Auto-connect on load
                 autoSync: true // Enable auto-sync
             },
