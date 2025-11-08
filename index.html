@@ -5630,6 +5630,76 @@ async loadAdvertising() {
         throw error;
     }
 }
+        // Debug functions for console
+window.testAdLoad = async function() {
+    console.log('🧪 Testing Advertising Load...');
+    console.log('==========================================');
+    
+    try {
+        console.log('1. Checking config...');
+        console.log('   Spreadsheet ID:', GoogleSheetsDB.config.spreadsheetId);
+        console.log('   Apps Script URL:', GoogleSheetsDB.config.appsScriptUrl);
+        
+        console.log('\n2. Loading sheet...');
+        const rawData = await GoogleSheetsDB.loadSheet('Advertising');
+        console.log('   ✅ Loaded:', rawData.length, 'rows');
+        
+        if (rawData.length > 0) {
+            console.log('\n3. First row data:');
+            console.log(rawData[0]);
+            
+            console.log('\n4. All column names:');
+            console.log(Object.keys(rawData[0]));
+            
+            console.log('\n5. Sample values:');
+            console.log('   Vendor:', rawData[0].Vendor);
+            console.log('   ASIN:', rawData[0].ASIN);
+            console.log('   Date:', rawData[0].Date);
+            console.log('   Spend:', rawData[0].Spend);
+        }
+        
+        console.log('\n6. Current state:');
+        console.log('   etrade:', state.advertisingData?.etrade?.length || 0);
+        console.log('   retailez:', state.advertisingData?.retailez?.length || 0);
+        console.log('   clicktech:', state.advertisingData?.clicktech?.length || 0);
+        
+        console.log('\n==========================================');
+        console.log('✅ Test complete!');
+        
+    } catch (error) {
+        console.error('❌ Error:', error);
+        console.error('Details:', error.message);
+    }
+};
+
+window.quickLoad = async function() {
+    console.log('🔄 Quick loading advertising data...');
+    try {
+        await GoogleSheetsDB.loadAdvertising();
+        console.log('✅ Load complete!');
+        console.log('Data loaded:', {
+            etrade: state.advertisingData.etrade.length,
+            retailez: state.advertisingData.retailez.length,
+            clicktech: state.advertisingData.clicktech.length
+        });
+    } catch (error) {
+        console.error('❌ Error:', error);
+    }
+};
+
+window.checkState = function() {
+    console.log('📊 Current State:');
+    console.log('==========================================');
+    console.log('Advertising Data:');
+    console.log('  etrade:', state.advertisingData?.etrade?.length || 0, 'entries');
+    console.log('  retailez:', state.advertisingData?.retailez?.length || 0, 'entries');
+    console.log('  clicktech:', state.advertisingData?.clicktech?.length || 0, 'entries');
+    
+    if (state.advertisingData?.etrade?.length > 0) {
+        console.log('\nFirst etrade entry:', state.advertisingData.etrade[0]);
+    }
+    console.log('==========================================');
+};
     </script>
 </body>
 </html>
