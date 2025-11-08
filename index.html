@@ -5503,136 +5503,10 @@ setTimeout(async () => {
 }, 1000);
 
 console.log('✓ Google Sheets integration ready');
-        // Load Advertising data - IMPROVED VERSION
-async loadAdvertising() {
-    try {
-        const data = await this.loadSheet('Advertising');
-        console.log('📊 Raw Advertising data loaded:', data.length, 'rows');
-        
-        if (data.length === 0) {
-            console.warn('⚠️ No advertising data in sheet');
-            showNotification('⚠️ No advertising data found in sheet', 'warning');
-            return [];
-        }
-        
-        // Log first row to see structure
-        console.log('First row sample:', data[0]);
-        console.log('Available columns:', Object.keys(data[0]));
-        
-        // Clear all vendor data
-        state.advertisingData = {
-            etrade: [],
-            retailez: [],
-            clicktech: []
-        };
-        
-        let idCounter = { etrade: 1, retailez: 1, clicktech: 1 };
-        let loadedCount = 0;
-        let skippedCount = 0;
-        
-        data.forEach((row, index) => {
-            // Try different possible column names (case-insensitive)
-            const getColumnValue = (row, possibleNames) => {
-                for (let name of possibleNames) {
-                    if (row[name] !== undefined && row[name] !== null && row[name] !== '') {
-                        return row[name];
-                    }
-                }
-                return null;
-            };
-            
-            const vendor = getColumnValue(row, ['Vendor', 'vendor', 'VENDOR']);
-            const asin = getColumnValue(row, ['ASIN', 'asin', 'Asin']);
-            const dateVal = getColumnValue(row, ['Date', 'date', 'DATE']);
-            const spend = getColumnValue(row, ['Spend', 'spend', 'SPEND', 'Ad Spend']);
-            const sales = getColumnValue(row, ['Sales', 'sales', 'SALES']);
-            const orders = getColumnValue(row, ['Orders', 'orders', 'ORDERS']);
-            const clicks = getColumnValue(row, ['Clicks', 'clicks', 'CLICKS']);
-            const impressions = getColumnValue(row, ['Impressions', 'impressions', 'IMPRESSIONS']);
-            
-            // Validate required fields
-            if (!vendor || !asin) {
-                console.log(`Row ${index + 1}: Skipped - missing vendor or ASIN`, { vendor, asin });
-                skippedCount++;
-                return;
-            }
-            
-            const vendorKey = vendor.toString().toLowerCase().trim();
-            
-            // Check if vendor exists
-            if (!state.advertisingData[vendorKey]) {
-                console.warn(`Row ${index + 1}: Unknown vendor "${vendorKey}" - skipping`);
-                skippedCount++;
-                return;
-            }
-            
-            // Parse date
-            let dateStr = '';
-            if (dateVal) {
-                if (typeof dateVal === 'string') {
-                    if (dateVal.match(/^\d{4}-\d{2}-\d{2}$/)) {
-                        dateStr = dateVal;
-                    } else {
-                        const parsedDate = new Date(dateVal);
-                        if (!isNaN(parsedDate.getTime())) {
-                            dateStr = parsedDate.toISOString().split('T')[0];
-                        }
-                    }
-                } else if (dateVal instanceof Date) {
-                    dateStr = dateVal.toISOString().split('T')[0];
-                }
-            }
-            
-            // Add to state
-            const entry = {
-                id: idCounter[vendorKey]++,
-                date: dateStr,
-                asin: asin.toString().trim(),
-                spend: parseFloat(spend) || 0,
-                sales: parseFloat(sales) || 0,
-                orders: parseInt(orders) || 0,
-                clicks: parseInt(clicks) || 0,
-                impressions: parseInt(impressions) || 0
-            };
-            
-            state.advertisingData[vendorKey].push(entry);
-            loadedCount++;
-            
-            // Log first few entries for verification
-            if (loadedCount <= 3) {
-                console.log(`✓ Loaded entry ${loadedCount}:`, entry);
-            }
-        });
-        
-        console.log('✅ Advertising load complete:');
-        console.log(`   Loaded: ${loadedCount} entries`);
-        console.log(`   Skipped: ${skippedCount} entries`);
-        console.log('   By vendor:', {
-            etrade: state.advertisingData.etrade.length,
-            retailez: state.advertisingData.retailez.length,
-            clicktech: state.advertisingData.clicktech.length
-        });
-        
-        if (loadedCount > 0) {
-            saveData();
-            render();
-            showNotification(`✅ Loaded ${loadedCount} advertising entries`, 'success');
-        } else {
-            showNotification('⚠️ No valid advertising entries found', 'warning');
-        }
-        
-        return data;
-    } catch (error) {
-        console.error('❌ Error loading Advertising:', error);
-        console.error('Error details:', error.message);
-        console.error('Stack:', error.stack);
-        showNotification('❌ Error loading advertising: ' + error.message, 'error');
-        throw error;
-    }
-}
-        // Debug functions for console
+
+// Debug functions for testing
 window.testAdLoad = async function() {
-    console.log('🧪 Testing Advertising Load...');
+    console.log('Testing Advertising Load...');
     console.log('==========================================');
     
     try {
@@ -5640,63 +5514,63 @@ window.testAdLoad = async function() {
         console.log('   Spreadsheet ID:', GoogleSheetsDB.config.spreadsheetId);
         console.log('   Apps Script URL:', GoogleSheetsDB.config.appsScriptUrl);
         
-        console.log('\n2. Loading sheet...');
+        console.log('2. Loading sheet...');
         const rawData = await GoogleSheetsDB.loadSheet('Advertising');
-        console.log('   ✅ Loaded:', rawData.length, 'rows');
+        console.log('   Loaded:', rawData.length, 'rows');
         
         if (rawData.length > 0) {
-            console.log('\n3. First row data:');
+            console.log('3. First row data:');
             console.log(rawData[0]);
             
-            console.log('\n4. All column names:');
+            console.log('4. All column names:');
             console.log(Object.keys(rawData[0]));
             
-            console.log('\n5. Sample values:');
+            console.log('5. Sample values:');
             console.log('   Vendor:', rawData[0].Vendor);
             console.log('   ASIN:', rawData[0].ASIN);
             console.log('   Date:', rawData[0].Date);
             console.log('   Spend:', rawData[0].Spend);
         }
         
-        console.log('\n6. Current state:');
-        console.log('   etrade:', state.advertisingData?.etrade?.length || 0);
-        console.log('   retailez:', state.advertisingData?.retailez?.length || 0);
-        console.log('   clicktech:', state.advertisingData?.clicktech?.length || 0);
+        console.log('6. Current state:');
+        console.log('   etrade:', state.advertisingData.etrade.length);
+        console.log('   retailez:', state.advertisingData.retailez.length);
+        console.log('   clicktech:', state.advertisingData.clicktech.length);
         
-        console.log('\n==========================================');
-        console.log('✅ Test complete!');
+        console.log('==========================================');
+        console.log('Test complete!');
         
     } catch (error) {
-        console.error('❌ Error:', error);
+        console.error('Error:', error);
         console.error('Details:', error.message);
     }
 };
 
 window.quickLoad = async function() {
-    console.log('🔄 Quick loading advertising data...');
+    console.log('Quick loading advertising data...');
     try {
         await GoogleSheetsDB.loadAdvertising();
-        console.log('✅ Load complete!');
+        console.log('Load complete!');
         console.log('Data loaded:', {
             etrade: state.advertisingData.etrade.length,
             retailez: state.advertisingData.retailez.length,
             clicktech: state.advertisingData.clicktech.length
         });
     } catch (error) {
-        console.error('❌ Error:', error);
+        console.error('Error:', error);
     }
 };
 
 window.checkState = function() {
-    console.log('📊 Current State:');
+    console.log('Current State:');
     console.log('==========================================');
     console.log('Advertising Data:');
-    console.log('  etrade:', state.advertisingData?.etrade?.length || 0, 'entries');
-    console.log('  retailez:', state.advertisingData?.retailez?.length || 0, 'entries');
-    console.log('  clicktech:', state.advertisingData?.clicktech?.length || 0, 'entries');
+    console.log('  etrade:', state.advertisingData.etrade.length, 'entries');
+    console.log('  retailez:', state.advertisingData.retailez.length, 'entries');
+    console.log('  clicktech:', state.advertisingData.clicktech.length, 'entries');
     
-    if (state.advertisingData?.etrade?.length > 0) {
-        console.log('\nFirst etrade entry:', state.advertisingData.etrade[0]);
+    if (state.advertisingData.etrade.length > 0) {
+        console.log('First etrade entry:', state.advertisingData.etrade[0]);
     }
     console.log('==========================================');
 };
