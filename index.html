@@ -4994,7 +4994,7 @@ const GoogleSheetsDB = {
             this.config.spreadsheetId = '1sOkFPyiPXvPsciScXGHfOhPc8Dg4NdmXJmtSIpprwR8';
         }
         if (!this.config.appsScriptUrl) {
-            this.config.appsScriptUrl = 'https://script.google.com/macros/s/AKfycbyqtZb6XFOqICJk-wENThgkgwVJ7Dw0SFZ5WZH3S85bOgs4XoseQJKbURBcRhc-QqhZ/exec';
+            this.config.appsScriptUrl = ' https://script.google.com/macros/s/AKfycbz4O-kGaNvRapwZ-oAtnJQ7fHYvhx6z4ksyp_wgju5Mw50yI8ccTLPMegGJWIegTWJv/exec';
         }
         this.config.connected = true;
         this.save();
@@ -5218,7 +5218,7 @@ const GoogleSheetsDB = {
         }
     },
 
-    / Load Advertising data - FIXED FOR YOUR SHEET STRUCTURE
+    // Load Advertising data - FIXED FOR YOUR SHEET STRUCTURE
 async loadAdvertising() {
     try {
         const data = await this.loadSheet('Advertising');
