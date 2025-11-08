@@ -2657,7 +2657,7 @@
             document.getElementById('advertising-content').innerHTML = html;
         }
 
-       document.getElementById('advertising-file-input').addEventListener('change', (e) => {
+      document.getElementById('advertising-file-input').addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
@@ -2837,7 +2837,6 @@ function processAdvertisingFile() {
 window.showAdvertisingDateModal = showAdvertisingDateModal;
 window.closeAdDateModal = closeAdDateModal;
 window.processAdvertisingFile = processAdvertisingFile;
-
         // Dashboard Functions
         function getMonthlyProfitability() {
             const monthlyData = {};
@@ -5144,42 +5143,33 @@ window.processAdvertisingFile = processAdvertisingFile;
             },
 
             // Save data to Google Sheets (via Apps Script)
-async saveSheet(sheetName, data) {
-    if (!this.config.appsScriptUrl) {
-        showNotification('⚠️ Apps Script not configured. Data exported as CSV.', 'warning');
-        return false;
-    }
+            async saveSheet(sheetName, data) {
+                if (!this.config.appsScriptUrl) {
+                    showNotification('⚠️ Apps Script not configured. Data exported as CSV.', 'warning');
+                    return false;
+                }
 
-    try {
-        console.log(`Saving to ${sheetName}:`, data.length, 'rows');
-        
-        const response = await fetch(this.config.appsScriptUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
+                try {
+                    const response = await fetch(this.config.appsScriptUrl, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            sheetName: sheetName,
+                            values: data
+                        })
+                    });
+
+                    showNotification(`✓ ${sheetName} saved to Google Sheets`, 'success');
+                    return true;
+                } catch (error) {
+                    console.error(`Error saving ${sheetName}:`, error);
+                    showNotification(`❌ Error saving ${sheetName}`, 'error');
+                    return false;
+                }
             },
-            body: JSON.stringify({
-                action: 'write',
-                sheetName: sheetName,
-                data: data
-            })
-        });
-
-        const result = await response.json();
-        
-        if (result.success) {
-            console.log(`✓ ${sheetName} saved successfully`);
-            showNotification(`✓ ${sheetName} saved to Google Sheets`, 'success');
-            return true;
-        } else {
-            throw new Error(result.error || 'Save failed');
-        }
-    } catch (error) {
-        console.error(`Error saving ${sheetName}:`, error);
-        showNotification(`❌ Error saving ${sheetName}: ${error.message}`, 'error');
-        return false;
-    }
-},
 
             // Load ASIN Master data
             async loadAsinMaster() {
@@ -5305,79 +5295,77 @@ async saveSheet(sheetName, data) {
                 }
             },
 
-          // Save all data for current vendor
-async saveAllForVendor() {
-    if (!this.config.appsScriptUrl) {
-        showNotification('⚠️ Write access not configured. Use CSV export instead.', 'warning');
-        exportAllDataToCSV();
-        return;
-    }
+            // Save all data for current vendor
+            async saveAllForVendor() {
+                if (!this.config.appsScriptUrl) {
+                    showNotification('⚠️ Write access not configured. Use CSV export instead.', 'warning');
+                    exportAllDataToCSV();
+                    return;
+                }
 
-    showNotification('📤 Saving to Google Sheets...', 'info');
-    
-    try {
-        const vendor = state.selectedVendor;
-        
-        // Prepare ASIN Master data
-        const asinData = state.asinData[vendor] || [];
-        const asinRows = [['Vendor', 'ASIN', 'Price']]; // Header row
-        asinData.forEach(item => {
-            if (item.asin) {
-                asinRows.push([vendor, item.asin, item.price || 0]);
-            }
-        });
-        
-        // Prepare Invoices data
-        const invoiceData = state.savedInvoices[vendor] || [];
-        const invoiceRows = [['Vendor', 'Date', 'Invoice ID', 'ASIN', 'Quantity', 'Item Price', 'Freight Cost']];
-        invoiceData.forEach(item => {
-            if (item.asin) {
-                invoiceRows.push([
-                    vendor,
-                    item.date || '',
-                    item.invoiceId || '',
-                    item.asin,
-                    item.quantity || 0,
-                    item.itemPrice || 0,
-                    state.freightCosts[vendor]?.[item.invoiceId] || 0
-                ]);
-            }
-        });
-        
-        // Prepare Advertising data
-        const adData = state.advertisingData[vendor] || [];
-        const adRows = [['Vendor', 'Date', 'ASIN', 'Spend', 'Sales', 'Orders', 'Clicks', 'Impressions']];
-        adData.forEach(item => {
-            if (item.asin) {
-                adRows.push([
-                    vendor,
-                    item.date || '',
-                    item.asin,
-                    item.spend || 0,
-                    item.sales || 0,
-                    item.orders || 0,
-                    item.clicks || 0,
-                    item.impressions || 0
-                ]);
-            }
-        });
-        
-        // Save each sheet
-        console.log('Saving ASIN Master:', asinRows.length - 1, 'rows');
-        await this.saveSheet('ASIN_Master', asinRows);
-        
-        console.log('Saving Invoices:', invoiceRows.length - 1, 'rows');
-        await this.saveSheet('Invoices', invoiceRows);
-        
-        console.log('Saving Advertising:', adRows.length - 1, 'rows');
-        await this.saveSheet('Advertising', adRows);
-        
-        showNotification(`✅ Saved all data!\n${asinRows.length - 1} ASINs\n${invoiceRows.length - 1} Invoices\n${adRows.length - 1} Ads`, 'success');
-    } catch (error) {
-        console.error('Save error:', error);
-        showNotification('❌ Error saving: ' + error.message, 'error');
-    }
-},
+                showNotification('📤 Saving to Google Sheets...', 'info');
+                
+                try {
+                    const vendor = state.selectedVendor;
+                    
+                    // Save ASIN Master
+                    const asinData = state.asinData[vendor] || [];
+                    const asinRows = asinData.map(item => [vendor, item.asin, item.price]);
+                    await this.saveSheet('ASIN_Master', asinRows);
+                    
+                    // Save Invoices
+                    const invoiceData = state.savedInvoices[vendor] || [];
+                    const invoiceRows = invoiceData.map(item => [
+                        vendor,
+                        item.date,
+                        item.invoiceId,
+                        item.asin,
+                        item.quantity,
+                        item.itemPrice,
+                        state.freightCosts[vendor]?.[item.invoiceId] || 0
+                    ]);
+                    await this.saveSheet('Invoices', invoiceRows);
+                    
+                    // Save Advertising
+                    const adData = state.advertisingData[vendor] || [];
+                    const adRows = adData.map(item => [
+                        vendor,
+                        item.date,
+                        item.asin,
+                        item.spend,
+                        item.sales,
+                        item.orders,
+                        item.clicks,
+                        item.impressions
+                    ]);
+                    await this.saveSheet('Advertising', adRows);
+                    
+                    showNotification('✅ All data saved successfully!', 'success');
+                } catch (error) {
+                    showNotification('❌ Error saving: ' + error.message, 'error');
+                }
+            },
+
+            // Load all data
+            async loadAll() {
+                if (!this.config.spreadsheetId) {
+                    showNotification('❌ Not connected to Google Sheets', 'error');
+                    return;
+                }
+
+                showNotification('📥 Loading from Google Sheets...', 'info');
+                
+                try {
+                    await this.loadAsinMaster();
+                    await this.loadInvoices();
+                    await this.loadAdvertising();
+                    
+                    recalculateAll();
+                    showNotification('✅ Data loaded successfully!', 'success');
+                } catch (error) {
+                    showNotification('❌ Error loading: ' + error.message, 'error');
+                }
+            },
 
             // Test connection
             async testConnection() {
