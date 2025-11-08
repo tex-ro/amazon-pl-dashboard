@@ -5218,67 +5218,131 @@ const GoogleSheetsDB = {
         }
     },
 
-    // Load Advertising data
-    async loadAdvertising() {
-        try {
-            const data = await this.loadSheet('Advertising');
-            console.log('✓ Loaded Advertising:', data.length, 'rows');
+    / Load Advertising data - FIXED FOR YOUR SHEET STRUCTURE
+async loadAdvertising() {
+    try {
+        const data = await this.loadSheet('Advertising');
+        console.log('📊 Raw Advertising data loaded:', data.length, 'rows');
+        
+        if (data.length === 0) {
+            console.warn('⚠️ No advertising data in sheet');
+            showNotification('⚠️ No advertising data found in sheet', 'warning');
+            return [];
+        }
+        
+        // Log first row to see structure
+        console.log('First row sample:', data[0]);
+        console.log('Available columns:', Object.keys(data[0]));
+        
+        // Clear all vendor data
+        state.advertisingData = {
+            etrade: [],
+            retailez: [],
+            clicktech: []
+        };
+        
+        let idCounter = { etrade: 1, retailez: 1, clicktech: 1 };
+        let loadedCount = 0;
+        let skippedCount = 0;
+        
+        data.forEach((row, index) => {
+            // Get values - trying all possible column names
+            const vendor = row.Vendor || row.vendor || row.VENDOR;
+            const asin = row.ASIN || row.asin || row.Asin;
+            const dateVal = row.Date || row.date || row.DATE;
+            const spend = row.Spend || row.spend || row.SPEND;
+            const sales = row.Sales || row.sales || row.SALES;
+            const orders = row.Orders || row.orders || row.ORDERS;
+            const clicks = row.Clicks || row.clicks || row.CLICKS;
+            const impressions = row.Impressions || row.impressions || row.IMPRESSIONS;
             
-            state.advertisingData = {
-                etrade: [],
-                retailez: [],
-                clicktech: []
-            };
+            // Validate required fields
+            if (!vendor || !asin) {
+                console.log(`Row ${index + 1}: Skipped - missing vendor or ASIN`, { vendor, asin });
+                skippedCount++;
+                return;
+            }
             
-            let idCounter = { etrade: 1, retailez: 1, clicktech: 1 };
+            const vendorKey = vendor.toString().toLowerCase().trim();
             
-            data.forEach(row => {
-                const vendor = row.Vendor ? row.Vendor.toLowerCase().trim() : '';
-                
-                if (!vendor || !row.ASIN) return;
-                
-                if (state.advertisingData[vendor]) {
-                    let dateStr = '';
-                    if (row.Date) {
-                        if (typeof row.Date === 'string') {
-                            if (row.Date.match(/^\d{4}-\d{2}-\d{2}$/)) {
-                                dateStr = row.Date;
-                            } else {
-                                const parsedDate = new Date(row.Date);
-                                if (!isNaN(parsedDate.getTime())) {
-                                    dateStr = parsedDate.toISOString().split('T')[0];
-                                }
-                            }
+            // Check if vendor exists
+            if (!state.advertisingData[vendorKey]) {
+                console.warn(`Row ${index + 1}: Unknown vendor "${vendorKey}" - skipping`);
+                skippedCount++;
+                return;
+            }
+            
+            // Parse date - handle Excel date format
+            let dateStr = '';
+            if (dateVal) {
+                if (typeof dateVal === 'string') {
+                    // If already in YYYY-MM-DD format
+                    if (dateVal.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                        dateStr = dateVal;
+                    } else {
+                        // Try to parse other formats
+                        const parsedDate = new Date(dateVal);
+                        if (!isNaN(parsedDate.getTime())) {
+                            dateStr = parsedDate.toISOString().split('T')[0];
                         }
                     }
-                    
-                    state.advertisingData[vendor].push({
-                        id: idCounter[vendor]++,
-                        date: dateStr,
-                        asin: (row.ASIN || '').toString().trim(),
-                        spend: parseFloat(row.Spend) || 0,
-                        sales: parseFloat(row.Sales) || 0,
-                        orders: parseInt(row.Orders) || 0,
-                        clicks: parseInt(row.Clicks) || 0,
-                        impressions: parseInt(row.Impressions) || 0
-                    });
+                } else if (typeof dateVal === 'number') {
+                    // Excel serial date number
+                    const excelDate = new Date((dateVal - 25569) * 86400 * 1000);
+                    if (!isNaN(excelDate.getTime())) {
+                        dateStr = excelDate.toISOString().split('T')[0];
+                    }
+                } else if (dateVal instanceof Date) {
+                    dateStr = dateVal.toISOString().split('T')[0];
                 }
-            });
+            }
             
-            console.log('✓ Advertising data loaded:', {
-                etrade: state.advertisingData.etrade.length,
-                retailez: state.advertisingData.retailez.length,
-                clicktech: state.advertisingData.clicktech.length
-            });
+            // Add to state
+            const entry = {
+                id: idCounter[vendorKey]++,
+                date: dateStr,
+                asin: asin.toString().trim(),
+                spend: parseFloat(spend) || 0,
+                sales: parseFloat(sales) || 0,
+                orders: parseInt(orders) || 0,
+                clicks: parseInt(clicks) || 0,
+                impressions: parseInt(impressions) || 0
+            };
             
+            state.advertisingData[vendorKey].push(entry);
+            loadedCount++;
+            
+            // Log first few entries for verification
+            if (loadedCount <= 3) {
+                console.log(`✓ Loaded entry ${loadedCount}:`, entry);
+            }
+        });
+        
+        console.log('✅ Advertising load complete:');
+        console.log(`   Loaded: ${loadedCount} entries`);
+        console.log(`   Skipped: ${skippedCount} entries`);
+        console.log('   By vendor:', {
+            etrade: state.advertisingData.etrade.length,
+            retailez: state.advertisingData.retailez.length,
+            clicktech: state.advertisingData.clicktech.length
+        });
+        
+        if (loadedCount > 0) {
             saveData();
             render();
-            return data;
-        } catch (error) {
-            console.error('Error loading Advertising:', error);
-            throw error;
+            showNotification(`✅ Loaded ${loadedCount} advertising entries`, 'success');
+        } else {
+            showNotification('⚠️ No valid advertising entries found', 'warning');
         }
-    },
+        
+        return data;
+    } catch (error) {
+        console.error('❌ Error loading Advertising:', error);
+        console.error('Error details:', error.message);
+        showNotification('❌ Error loading advertising: ' + error.message, 'error');
+        throw error;
+    }
+},
 
     // Save all data for ALL vendors
     async saveAllForVendor() {
