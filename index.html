@@ -2657,81 +2657,186 @@
             document.getElementById('advertising-content').innerHTML = html;
         }
 
-        document.getElementById('advertising-file-input').addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
+       document.getElementById('advertising-file-input').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
 
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                try {
-                    const content = event.target.result;
-                    const lines = content.split('\n').filter(line => line.trim());
-                    if (lines.length < 2) {
-                        alert('⚠ File has insufficient data');
-                        return;
-                    }
+    // Show date picker modal
+    showAdvertisingDateModal(file);
+});
 
-                    const headers = lines[0].split(',').map(h => h.trim().replace(/^["']|["']$/g, '').toLowerCase());
-                    
-                    const productIndex = headers.findIndex(h => h.includes('product'));
-                    const salesIndex = headers.findIndex(h => h.includes('sales') && h.includes('inr'));
-                    const spendIndex = headers.findIndex(h => h.includes('spend') && h.includes('inr'));
-                    const acosIndex = headers.findIndex(h => h === 'acos');
-                    const roasIndex = headers.findIndex(h => h === 'roas');
-                    const ordersIndex = headers.findIndex(h => h === 'orders');
-                    const clicksIndex = headers.findIndex(h => h === 'clicks');
-                    const impressionsIndex = headers.findIndex(h => h === 'impressions');
+// Function to show date picker modal for advertising import
+function showAdvertisingDateModal(file) {
+    const modal = `
+        <div class="modal-overlay" id="ad-date-modal" onclick="if(event.target.id === 'ad-date-modal') closeAdDateModal()">
+            <div class="modal" onclick="event.stopPropagation()">
+                <div class="modal-header">
+                    <h2 class="modal-title">📅 Select Date for Advertising Data</h2>
+                    <button class="close-btn" onclick="closeAdDateModal()">×</button>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Import Date</label>
+                    <input type="date" id="ad-import-date" class="form-control" 
+                        value="${new Date().toISOString().split('T')[0]}"
+                        style="width: 100%; padding: 0.75rem; border: 2px solid var(--gray-200); border-radius: var(--radius-sm); font-size: 0.9375rem;">
+                    <div class="form-help">This date will be applied to all imported advertising entries</div>
+                </div>
 
-                    const importedData = [];
-                    let totalSpend = 0;
-                    let totalSales = 0;
-                    
-                    for (let i = 1; i < lines.length; i++) {
-                        const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
-                        const columns = lines[i].split(regex).map(col => col.trim().replace(/^["']|["']$/g, ''));
-                        
-                        const productField = productIndex !== -1 ? columns[productIndex] : '';
-                        const asin = productField.split('-')[0];
-                        
-                        const sales = salesIndex !== -1 ? parseFloat(columns[salesIndex].replace(/,/g, '')) || 0 : 0;
-                        const spend = spendIndex !== -1 ? parseFloat(columns[spendIndex].replace(/,/g, '')) || 0 : 0;
-                        const acos = acosIndex !== -1 ? parseFloat(columns[acosIndex]) || 0 : 0;
-                        const roas = roasIndex !== -1 ? parseFloat(columns[roasIndex]) || 0 : 0;
-                        const orders = ordersIndex !== -1 ? parseInt(columns[ordersIndex]) || 0 : 0;
-                        const clicks = clicksIndex !== -1 ? parseInt(columns[clicksIndex]) || 0 : 0;
-                        const impressions = impressionsIndex !== -1 ? parseInt(columns[impressionsIndex]) || 0 : 0;
-                        
-                        if (asin && spend > 0) {
-                            importedData.push({
-                                asin,
-                                sales,
-                                spend,
-                                acos,
-                                roas,
-                                orders,
-                                clicks,
-                                impressions,
-                                date: new Date().toISOString().split('T')[0]
-                            });
-                            totalSpend += spend;
-                            totalSales += sales;
-                        }
-                    }
-                    
-                    if (importedData.length > 0) {
-                        state.advertisingData[state.selectedVendor].push(...importedData);
-                        saveData();
-                        render();
-                        alert(`✓ Imported ${importedData.length} products for ${state.selectedVendor}!\nTotal Spend: ${formatCurrency(totalSpend)}\nTotal Sales: ${formatCurrency(totalSales)}`);
-                    }
-                } catch (error) {
-                    console.error('Advertising import error:', error);
-                    alert('⚠ Error importing file. Please check the file format.');
+                <div style="background: var(--gray-50); padding: 1rem; border-radius: var(--radius-sm); margin-top: 1rem;">
+                    <p style="font-size: 0.875rem; color: var(--gray-600); margin: 0;">
+                        📊 <strong>File:</strong> ${file.name}<br>
+                        💡 <strong>Tip:</strong> Use the date range from your advertising report
+                    </p>
+                </div>
+
+                <div style="display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1.5rem;">
+                    <button class="btn btn-gray" onclick="closeAdDateModal()">Cancel</button>
+                    <button class="btn btn-primary" onclick="processAdvertisingFile()">📤 Import Data</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', modal);
+    window.pendingAdFile = file;
+}
+
+function closeAdDateModal() {
+    const modal = document.getElementById('ad-date-modal');
+    if (modal) modal.remove();
+    window.pendingAdFile = null;
+    document.getElementById('advertising-file-input').value = '';
+}
+
+function processAdvertisingFile() {
+    const file = window.pendingAdFile;
+    const dateInput = document.getElementById('ad-import-date');
+    const selectedDate = dateInput ? dateInput.value : new Date().toISOString().split('T')[0];
+    
+    if (!file) {
+        alert('⚠ No file selected');
+        return;
+    }
+
+    if (!selectedDate) {
+        alert('⚠ Please select a date');
+        return;
+    }
+
+    closeAdDateModal();
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+        try {
+            const content = event.target.result;
+            const lines = content.split('\n').filter(line => line.trim());
+            
+            // Skip header rows - find where actual data starts
+            let dataStartIndex = 0;
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i].toLowerCase();
+                if (line.includes('asin') && (line.includes('impression') || line.includes('click'))) {
+                    dataStartIndex = i;
+                    break;
                 }
-            };
-            reader.readAsText(file);
-            e.target.value = '';
-        });
+            }
+            
+            if (dataStartIndex === 0 || lines.length < dataStartIndex + 2) {
+                alert('⚠ Invalid file format. Could not find data headers.');
+                return;
+            }
+
+            const headers = lines[dataStartIndex].split(',').map(h => h.trim().replace(/^["']|["']$/g, '').toLowerCase());
+            
+            const asinIndex = headers.findIndex(h => h === 'asin');
+            const impressionIndex = headers.findIndex(h => h === 'impression');
+            const clickIndex = headers.findIndex(h => h === 'click');
+            const spendIndex = headers.findIndex(h => h === 'spend');
+            const salesIndex = headers.findIndex(h => h === 'sales');
+            const ordersIndex = headers.findIndex(h => h === 'orders');
+
+            if (asinIndex === -1) {
+                alert('⚠ Could not find ASIN column in file');
+                return;
+            }
+
+            const importedData = [];
+            let totalSpend = 0;
+            let totalSales = 0;
+            let skippedRows = 0;
+            
+            for (let i = dataStartIndex + 1; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (!line || line.toLowerCase().startsWith('total')) continue;
+                
+                const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
+                const columns = line.split(regex).map(col => col.trim().replace(/^["']|["']$/g, ''));
+                
+                const asin = columns[asinIndex] || '';
+                
+                if (!asin || asin.length < 5) {
+                    skippedRows++;
+                    continue;
+                }
+                
+                const parseValue = (val) => {
+                    if (!val) return 0;
+                    return parseFloat(val.replace(/[₹,]/g, '').trim()) || 0;
+                };
+                
+                const impressions = impressionIndex !== -1 ? parseValue(columns[impressionIndex]) : 0;
+                const clicks = clickIndex !== -1 ? parseValue(columns[clickIndex]) : 0;
+                const spend = spendIndex !== -1 ? parseValue(columns[spendIndex]) : 0;
+                const sales = salesIndex !== -1 ? parseValue(columns[salesIndex]) : 0;
+                const orders = ordersIndex !== -1 ? parseValue(columns[ordersIndex]) : 0;
+                
+                if (spend > 0) {
+                    importedData.push({
+                        asin,
+                        sales,
+                        spend,
+                        orders,
+                        clicks,
+                        impressions,
+                        date: selectedDate
+                    });
+                    totalSpend += spend;
+                    totalSales += sales;
+                } else {
+                    skippedRows++;
+                }
+            }
+            
+            if (importedData.length > 0) {
+                state.advertisingData[state.selectedVendor].push(...importedData);
+                saveData();
+                render();
+                
+                let message = `✅ Imported ${importedData.length} ASINs!\n`;
+                message += `📅 Date: ${selectedDate}\n`;
+                message += `💰 Total Spend: ${formatCurrency(totalSpend)}\n`;
+                message += `💵 Total Sales: ${formatCurrency(totalSales)}`;
+                
+                if (skippedRows > 0) {
+                    message += `\n⚠️ Skipped ${skippedRows} rows`;
+                }
+                
+                showNotification(message, 'success');
+            } else {
+                alert('⚠ No valid data found in file.');
+            }
+        } catch (error) {
+            console.error('Import error:', error);
+            alert('⚠ Error importing file: ' + error.message);
+        }
+    };
+    reader.readAsText(file);
+}
+
+window.showAdvertisingDateModal = showAdvertisingDateModal;
+window.closeAdDateModal = closeAdDateModal;
+window.processAdvertisingFile = processAdvertisingFile;
 
         // Dashboard Functions
         function getMonthlyProfitability() {
