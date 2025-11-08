@@ -5439,6 +5439,133 @@ setTimeout(async () => {
 }, 1000);
 
 console.log('✓ Google Sheets integration ready');
+        // Load Advertising data - IMPROVED VERSION
+async loadAdvertising() {
+    try {
+        const data = await this.loadSheet('Advertising');
+        console.log('📊 Raw Advertising data loaded:', data.length, 'rows');
+        
+        if (data.length === 0) {
+            console.warn('⚠️ No advertising data in sheet');
+            showNotification('⚠️ No advertising data found in sheet', 'warning');
+            return [];
+        }
+        
+        // Log first row to see structure
+        console.log('First row sample:', data[0]);
+        console.log('Available columns:', Object.keys(data[0]));
+        
+        // Clear all vendor data
+        state.advertisingData = {
+            etrade: [],
+            retailez: [],
+            clicktech: []
+        };
+        
+        let idCounter = { etrade: 1, retailez: 1, clicktech: 1 };
+        let loadedCount = 0;
+        let skippedCount = 0;
+        
+        data.forEach((row, index) => {
+            // Try different possible column names (case-insensitive)
+            const getColumnValue = (row, possibleNames) => {
+                for (let name of possibleNames) {
+                    if (row[name] !== undefined && row[name] !== null && row[name] !== '') {
+                        return row[name];
+                    }
+                }
+                return null;
+            };
+            
+            const vendor = getColumnValue(row, ['Vendor', 'vendor', 'VENDOR']);
+            const asin = getColumnValue(row, ['ASIN', 'asin', 'Asin']);
+            const dateVal = getColumnValue(row, ['Date', 'date', 'DATE']);
+            const spend = getColumnValue(row, ['Spend', 'spend', 'SPEND', 'Ad Spend']);
+            const sales = getColumnValue(row, ['Sales', 'sales', 'SALES']);
+            const orders = getColumnValue(row, ['Orders', 'orders', 'ORDERS']);
+            const clicks = getColumnValue(row, ['Clicks', 'clicks', 'CLICKS']);
+            const impressions = getColumnValue(row, ['Impressions', 'impressions', 'IMPRESSIONS']);
+            
+            // Validate required fields
+            if (!vendor || !asin) {
+                console.log(`Row ${index + 1}: Skipped - missing vendor or ASIN`, { vendor, asin });
+                skippedCount++;
+                return;
+            }
+            
+            const vendorKey = vendor.toString().toLowerCase().trim();
+            
+            // Check if vendor exists
+            if (!state.advertisingData[vendorKey]) {
+                console.warn(`Row ${index + 1}: Unknown vendor "${vendorKey}" - skipping`);
+                skippedCount++;
+                return;
+            }
+            
+            // Parse date
+            let dateStr = '';
+            if (dateVal) {
+                if (typeof dateVal === 'string') {
+                    if (dateVal.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                        dateStr = dateVal;
+                    } else {
+                        const parsedDate = new Date(dateVal);
+                        if (!isNaN(parsedDate.getTime())) {
+                            dateStr = parsedDate.toISOString().split('T')[0];
+                        }
+                    }
+                } else if (dateVal instanceof Date) {
+                    dateStr = dateVal.toISOString().split('T')[0];
+                }
+            }
+            
+            // Add to state
+            const entry = {
+                id: idCounter[vendorKey]++,
+                date: dateStr,
+                asin: asin.toString().trim(),
+                spend: parseFloat(spend) || 0,
+                sales: parseFloat(sales) || 0,
+                orders: parseInt(orders) || 0,
+                clicks: parseInt(clicks) || 0,
+                impressions: parseInt(impressions) || 0
+            };
+            
+            state.advertisingData[vendorKey].push(entry);
+            loadedCount++;
+            
+            // Log first few entries for verification
+            if (loadedCount <= 3) {
+                console.log(`✓ Loaded entry ${loadedCount}:`, entry);
+            }
+        });
+        
+        console.log('✅ Advertising load complete:');
+        console.log(`   Loaded: ${loadedCount} entries`);
+        console.log(`   Skipped: ${skippedCount} entries`);
+        console.log('   By vendor:', {
+            etrade: state.advertisingData.etrade.length,
+            retailez: state.advertisingData.retailez.length,
+            clicktech: state.advertisingData.clicktech.length
+        });
+        
+        if (loadedCount > 0) {
+            saveData();
+            render();
+            showNotification(`✅ Loaded ${loadedCount} advertising entries`, 'success');
+        } else {
+            showNotification('⚠️ No valid advertising entries found', 'warning');
+        }
+        
+        return data;
+    } catch (error) {
+        console.error('❌ Error loading Advertising:', error);
+        console.error('Error details:', error.message);
+        console.error('Stack:', error.stack);
+        showNotification('❌ Error loading advertising: ' + error.message, 'error');
+        throw error;
+    }
+}
     </script>
 </body>
 </html>
