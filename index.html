@@ -2715,12 +2715,12 @@ function processAdvertisingFile() {
     const selectedDate = dateInput ? dateInput.value : new Date().toISOString().split('T')[0];
     
     if (!file) {
-        alert('⚠ No file selected');
+        showNotification('⚠ No file selected', 'error');
         return;
     }
 
     if (!selectedDate) {
-        alert('⚠ Please select a date');
+        showNotification('⚠ Please select a date', 'error');
         return;
     }
 
@@ -2732,57 +2732,101 @@ function processAdvertisingFile() {
             const content = event.target.result;
             const lines = content.split('\n').filter(line => line.trim());
             
-            // Skip header rows - find where actual data starts
-            let dataStartIndex = 0;
-            for (let i = 0; i < lines.length; i++) {
+            console.log('📊 Processing advertising file...');
+            console.log('Total lines:', lines.length);
+            
+            if (lines.length < 2) {
+                showNotification('⚠ File has insufficient data', 'error');
+                return;
+            }
+
+            // Find header row (look for row with ASIN column)
+            let headerIndex = -1;
+            for (let i = 0; i < Math.min(5, lines.length); i++) {
                 const line = lines[i].toLowerCase();
-                if (line.includes('asin') && (line.includes('impression') || line.includes('click'))) {
-                    dataStartIndex = i;
+                if (line.includes('asin') && (line.includes('impression') || line.includes('click') || line.includes('spend'))) {
+                    headerIndex = i;
+                    console.log('✓ Found header at line', i + 1);
                     break;
                 }
             }
             
-            if (dataStartIndex === 0 || lines.length < dataStartIndex + 2) {
-                alert('⚠ Invalid file format. Could not find data headers.');
+            if (headerIndex === -1) {
+                showNotification('⚠ Could not find valid header row with ASIN column', 'error');
+                console.error('Header search failed. First 3 lines:', lines.slice(0, 3));
                 return;
             }
 
-            const headers = lines[dataStartIndex].split(',').map(h => h.trim().replace(/^["']|["']$/g, '').toLowerCase());
+            // Parse headers
+            const headerLine = lines[headerIndex];
+            const headers = headerLine.split(',').map(h => h.trim().replace(/^["']|["']$/g, '').toLowerCase());
             
-            const asinIndex = headers.findIndex(h => h === 'asin');
-            const impressionIndex = headers.findIndex(h => h === 'impression');
-            const clickIndex = headers.findIndex(h => h === 'click');
-            const spendIndex = headers.findIndex(h => h === 'spend');
-            const salesIndex = headers.findIndex(h => h === 'sales');
-            const ordersIndex = headers.findIndex(h => h === 'orders');
+            console.log('📋 Column headers found:', headers);
+
+            // Find column indices (try multiple variations)
+            const asinIndex = headers.findIndex(h => h === 'asin' || h === 'product asin');
+            const impressionIndex = headers.findIndex(h => 
+                h === 'impression' || h === 'impressions' || h.includes('impression')
+            );
+            const clickIndex = headers.findIndex(h => 
+                h === 'click' || h === 'clicks' || h.includes('click')
+            );
+            const spendIndex = headers.findIndex(h => 
+                h === 'spend' || h === 'ad spend' || h.includes('spend') || h.includes('cost')
+            );
+            const salesIndex = headers.findIndex(h => 
+                h === 'sales' || h === 'revenue' || h.includes('sales')
+            );
+            const ordersIndex = headers.findIndex(h => 
+                h === 'orders' || h === 'order' || h.includes('order')
+            );
+
+            console.log('📍 Column indices:', {
+                asin: asinIndex,
+                impressions: impressionIndex,
+                clicks: clickIndex,
+                spend: spendIndex,
+                sales: salesIndex,
+                orders: ordersIndex
+            });
 
             if (asinIndex === -1) {
-                alert('⚠ Could not find ASIN column in file');
+                showNotification('⚠ ASIN column not found in file', 'error');
                 return;
             }
 
+            // Process data rows
             const importedData = [];
             let totalSpend = 0;
             let totalSales = 0;
             let skippedRows = 0;
             
-            for (let i = dataStartIndex + 1; i < lines.length; i++) {
+            for (let i = headerIndex + 1; i < lines.length; i++) {
                 const line = lines[i].trim();
-                if (!line || line.toLowerCase().startsWith('total')) continue;
                 
+                // Skip empty lines and total rows
+                if (!line || line.toLowerCase().startsWith('total')) {
+                    continue;
+                }
+                
+                // Parse CSV with proper quote handling
                 const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
                 const columns = line.split(regex).map(col => col.trim().replace(/^["']|["']$/g, ''));
                 
                 const asin = columns[asinIndex] || '';
                 
-                if (!asin || asin.length < 5) {
+                // Validate ASIN
+                if (!asin || asin.length < 5 || asin.toLowerCase() === 'asin') {
                     skippedRows++;
                     continue;
                 }
                 
+                // Parse numeric values safely
                 const parseValue = (val) => {
-                    if (!val) return 0;
-                    return parseFloat(val.replace(/[₹,]/g, '').trim()) || 0;
+                    if (!val || val === '') return 0;
+                    const cleaned = val.toString().replace(/[₹,$,\s]/g, '').trim();
+                    const parsed = parseFloat(cleaned);
+                    return isNaN(parsed) ? 0 : parsed;
                 };
                 
                 const impressions = impressionIndex !== -1 ? parseValue(columns[impressionIndex]) : 0;
@@ -2791,14 +2835,15 @@ function processAdvertisingFile() {
                 const sales = salesIndex !== -1 ? parseValue(columns[salesIndex]) : 0;
                 const orders = ordersIndex !== -1 ? parseValue(columns[ordersIndex]) : 0;
                 
+                // Only include rows with spend > 0
                 if (spend > 0) {
                     importedData.push({
-                        asin,
-                        sales,
-                        spend,
-                        orders,
-                        clicks,
-                        impressions,
+                        asin: asin.trim(),
+                        sales: sales,
+                        spend: spend,
+                        orders: orders,
+                        clicks: clicks,
+                        impressions: impressions,
                         date: selectedDate
                     });
                     totalSpend += spend;
@@ -2808,8 +2853,20 @@ function processAdvertisingFile() {
                 }
             }
             
+            console.log('✅ Processing complete:', {
+                imported: importedData.length,
+                skipped: skippedRows,
+                totalSpend: totalSpend,
+                totalSales: totalSales
+            });
+            
             if (importedData.length > 0) {
+                // Add to state
+                if (!state.advertisingData[state.selectedVendor]) {
+                    state.advertisingData[state.selectedVendor] = [];
+                }
                 state.advertisingData[state.selectedVendor].push(...importedData);
+                
                 saveData();
                 render();
                 
@@ -2819,21 +2876,30 @@ function processAdvertisingFile() {
                 message += `💵 Total Sales: ${formatCurrency(totalSales)}`;
                 
                 if (skippedRows > 0) {
-                    message += `\n⚠️ Skipped ${skippedRows} rows`;
+                    message += `\n⚠️ Skipped ${skippedRows} rows (zero spend or invalid)`;
                 }
                 
                 showNotification(message, 'success');
+                
+                console.log('✓ Data added to state:', state.advertisingData[state.selectedVendor].length, 'total entries');
             } else {
-                alert('⚠ No valid data found in file.');
+                showNotification('⚠ No valid data found in file (all rows had zero spend)', 'warning');
             }
         } catch (error) {
-            console.error('Import error:', error);
-            alert('⚠ Error importing file: ' + error.message);
+            console.error('❌ Import error:', error);
+            console.error('Error stack:', error.stack);
+            showNotification('⚠ Error importing file: ' + error.message, 'error');
         }
     };
+    
+    reader.onerror = () => {
+        showNotification('⚠ Error reading file', 'error');
+    };
+    
     reader.readAsText(file);
 }
 
+// Make functions globally available
 window.showAdvertisingDateModal = showAdvertisingDateModal;
 window.closeAdDateModal = closeAdDateModal;
 window.processAdvertisingFile = processAdvertisingFile;
