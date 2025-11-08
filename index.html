@@ -5154,8 +5154,58 @@
 
             // Load Advertising data
             async loadAdvertising() {
-                try {
-                    const data = await this.loadSheet('Advertising');
+    try {
+        const spreadsheetId = this.config.spreadsheetId;
+        const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:json&sheet=Advertising`;
+        
+        const response = await fetch(url);
+        const text = await response.text();
+        
+        if (text.includes('Invalid query')) {
+            throw new Error('Sheet "Advertising" not found');
+        }
+        
+        const jsonString = text.substring(47, text.length - 2);
+        const vizData = JSON.parse(jsonString);
+        const rows = vizData.table.rows;
+        
+        console.log(`✓ Loaded Advertising: ${rows.length} rows`);
+        
+        if (rows.length === 0) { return []; }
+        
+        const headers = rows[0].c.map(cell => cell ? (cell.v || '').toString() : '');
+        
+        state.advertisingData = { etrade: [], retailez: [], clicktech: [] };
+        
+        for (let i = 1; i < rows.length; i++) {
+            const row = rows[i].c;
+            const rowData = {};
+            headers.forEach((header, index) => {
+                const cell = row[index];
+                rowData[header] = cell ? (cell.v !== null ? cell.v : '') : '';
+            });
+            
+            const vendor = (rowData.Vendor || '').toString().toLowerCase().trim();
+            const date = (rowData.Date || '').toString().trim();
+            const asin = (rowData.ASIN || '').toString().trim();
+            const spend = parseFloat(rowData.Spend || 0);
+            const sales = parseFloat(rowData.Sales || 0);
+            const orders = parseInt(rowData.Orders || 0);
+            const clicks = parseInt(rowData.Clicks || 0);
+            const impressions = parseInt(rowData.Impressions || 0);
+            
+            if (!['etrade', 'retailez', 'clicktech'].includes(vendor)) continue;
+            if (!asin || !date) continue;
+            
+            state.advertisingData[vendor].push({
+                date, asin, spend, sales, orders, clicks, impressions
+            });
+        }
+        
+        console.log('✓ Advertising loaded:', state.advertisingData.etrade.length, state.advertisingData.retailez.length, state.advertisingData.clicktech.length);
+        saveData();
+        if (state.activeTab === 'advertising') render();
+        return state.advertisingData;
                     console.log('✓ Loaded Advertising:', data.length, 'rows');
                     
                     // Clear all vendor data
