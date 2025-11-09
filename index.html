@@ -2667,6 +2667,9 @@
 
 // Function to show date picker modal for advertising import
 function showAdvertisingDateModal(file) {
+    console.log('📅 DEBUG: Opening date modal for file:', file ? file.name : 'NO FILE'); // ← ADD THIS LINE
+    console.log('📅 DEBUG: File size:', file ? file.size : 'NO FILE'); // ← ADD THIS LINE
+    
     const modal = `
         <div class="modal-overlay" id="ad-date-modal" onclick="if(event.target.id === 'ad-date-modal') closeAdDateModal()">
             <div class="modal" onclick="event.stopPropagation()">
@@ -2714,10 +2717,24 @@ function processAdvertisingFile() {
     const dateInput = document.getElementById('ad-import-date');
     const selectedDate = dateInput ? dateInput.value : new Date().toISOString().split('T')[0];
     
+    console.log('🔍 DEBUG START - processAdvertisingFile'); // ← ADD THIS
+    console.log('🔍 File:', file ? file.name : 'NO FILE'); // ← ADD THIS
+    console.log('🔍 Date selected:', selectedDate); // ← ADD THIS
+    console.log('🔍 Current vendor:', state.selectedVendor); // ← ADD THIS
+    
     if (!file) {
+        console.log('❌ ERROR: No file found!'); // ← ADD THIS
         showNotification('⚠ No file selected', 'error');
         return;
     }
+    
+    if (!selectedDate) {
+        console.log('❌ ERROR: No date selected!'); // ← ADD THIS
+        showNotification('⚠ Please select a date', 'error');
+        return;
+    }
+    
+    console.log('✅ Starting file read...'); // ← ADD THIS
 
     if (!selectedDate) {
         showNotification('⚠ Please select a date', 'error');
@@ -2860,15 +2877,25 @@ function processAdvertisingFile() {
                 totalSales: totalSales
             });
             
-            if (importedData.length > 0) {
-                // Add to state
-                if (!state.advertisingData[state.selectedVendor]) {
-                    state.advertisingData[state.selectedVendor] = [];
-                }
-                state.advertisingData[state.selectedVendor].push(...importedData);
-                
-                saveData();
-                render();
+           if (importedData.length > 0) {
+    console.log('✅ About to add data to state...'); // ← ADD THIS
+    console.log('✅ Vendor:', state.selectedVendor); // ← ADD THIS
+    console.log('✅ Data to add:', importedData.length, 'entries'); // ← ADD THIS
+    
+    // Add to state
+    if (!state.advertisingData[state.selectedVendor]) {
+        state.advertisingData[state.selectedVendor] = [];
+    }
+    
+    console.log('✅ Before push - current count:', state.advertisingData[state.selectedVendor].length); // ← ADD THIS
+    state.advertisingData[state.selectedVendor].push(...importedData);
+    console.log('✅ After push - new count:', state.advertisingData[state.selectedVendor].length); // ← ADD THIS
+    
+    saveData();
+    console.log('✅ Data saved to localStorage'); // ← ADD THIS
+    render();
+    console.log('✅ Render complete'); // ← ADD THIS
+```
                 
                 let message = `✅ Imported ${importedData.length} ASINs!\n`;
                 message += `📅 Date: ${selectedDate}\n`;
