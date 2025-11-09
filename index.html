@@ -2876,28 +2876,42 @@ function processAdvertisingFile() {
                 totalSpend: totalSpend,
                 totalSales: totalSales
             });
-            
-           if (importedData.length > 0) {
-    console.log('✅ About to add data to state...'); // ← ADD THIS
-    console.log('✅ Vendor:', state.selectedVendor); // ← ADD THIS
-    console.log('✅ Data to add:', importedData.length, 'entries'); // ← ADD THIS
+          if (importedData.length > 0) {
+    console.log('✅ About to add data to state...');
+    console.log('✅ Vendor:', state.selectedVendor);
+    console.log('✅ Data to add:', importedData.length, 'entries');
     
     // Add to state
     if (!state.advertisingData[state.selectedVendor]) {
         state.advertisingData[state.selectedVendor] = [];
     }
     
-    console.log('✅ Before push - current count:', state.advertisingData[state.selectedVendor].length); // ← ADD THIS
+    console.log('✅ Before push - current count:', state.advertisingData[state.selectedVendor].length);
     state.advertisingData[state.selectedVendor].push(...importedData);
-    console.log('✅ After push - new count:', state.advertisingData[state.selectedVendor].length); // ← ADD THIS
+    console.log('✅ After push - new count:', state.advertisingData[state.selectedVendor].length);
     
     saveData();
-    console.log('✅ Data saved to localStorage'); // ← ADD THIS
+    console.log('✅ Data saved to localStorage');
     render();
-    console.log('✅ Render complete'); // ← ADD THIS
-```
-                
-                let message = `✅ Imported ${importedData.length} ASINs!\n`;
+    console.log('✅ Render complete');
+    
+    let message = `✅ Imported ${importedData.length} ASINs!\n`;
+    message += `📅 Date: ${selectedDate}\n`;
+    message += `💰 Total Spend: ${formatCurrency(totalSpend)}\n`;
+    message += `💵 Total Sales: ${formatCurrency(totalSales)}`;
+    
+    if (skippedRows > 0) {
+        message += `\n⚠️ Skipped ${skippedRows} rows (zero spend or invalid)`;
+    }
+    
+    showNotification(message, 'success');
+    
+    console.log('✓ Data added to state:', state.advertisingData[state.selectedVendor].length, 'total entries');
+} else {
+    showNotification('⚠ No valid data found in file (all rows had zero spend)', 'warning');
+}
+````        
+               let message = `✅ Imported ${importedData.length} ASINs!\n`;
                 message += `📅 Date: ${selectedDate}\n`;
                 message += `💰 Total Spend: ${formatCurrency(totalSpend)}\n`;
                 message += `💵 Total Sales: ${formatCurrency(totalSales)}`;
