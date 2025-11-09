@@ -2911,21 +2911,6 @@ function processAdvertisingFile() {
     showNotification('⚠ No valid data found in file (all rows had zero spend)', 'warning');
 }
 ````        
-               let message = `✅ Imported ${importedData.length} ASINs!\n`;
-                message += `📅 Date: ${selectedDate}\n`;
-                message += `💰 Total Spend: ${formatCurrency(totalSpend)}\n`;
-                message += `💵 Total Sales: ${formatCurrency(totalSales)}`;
-                
-                if (skippedRows > 0) {
-                    message += `\n⚠️ Skipped ${skippedRows} rows (zero spend or invalid)`;
-                }
-                
-                showNotification(message, 'success');
-                
-                console.log('✓ Data added to state:', state.advertisingData[state.selectedVendor].length, 'total entries');
-            } else {
-                showNotification('⚠ No valid data found in file (all rows had zero spend)', 'warning');
-            }
         } catch (error) {
             console.error('❌ Import error:', error);
             console.error('Error stack:', error.stack);
