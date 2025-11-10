@@ -5273,6 +5273,8 @@ const GoogleSheetsDB = {
                 headers = ['Vendor', 'Date', 'Invoice ID', 'ASIN', 'Quantity', 'Item Price', 'Freight Cost'];
             } else if (sheetName === 'Advertising') {
                 headers = ['Vendor', 'Date', 'ASIN', 'Spend', 'Sales', 'Orders', 'Clicks', 'Impressions'];
+            } else if (sheetName === 'VRET_COGS') {
+                headers = ['Vendor', 'Month', 'Year', 'VRET', 'COGS'];
             }
 
             const fullData = [headers, ...data];
@@ -5533,6 +5535,123 @@ async loadAdvertising() {
     }
 },
 
+    // Load VRET & COGS data
+    async loadVretCogs() {
+        try {
+            console.log('🔍 Starting loadVretCogs...');
+            const data = await this.loadSheet('VRET_COGS');
+            console.log('📊 Raw VRET & COGS data loaded:', data.length, 'rows');
+
+            if (data.length === 0) {
+                console.warn('⚠️ No VRET & COGS data in sheet');
+                showNotification('⚠️ No VRET & COGS data found in sheet', 'warning');
+                return [];
+            }
+
+            // Log first few rows to see structure
+            console.log('First 3 rows sample:', data.slice(0, 3));
+            console.log('Available columns:', Object.keys(data[0]));
+
+            // Clear all vendor data
+            state.savedVretCogs = {
+                etrade: [],
+                retailez: [],
+                clicktech: []
+            };
+
+            let idCounter = { etrade: 1, retailez: 1, clicktech: 1 };
+            let loadedCount = 0;
+            let skippedCount = 0;
+
+            data.forEach((row, index) => {
+                // Get values - trying all possible column names
+                const vendor = row.Vendor || row.vendor || row.VENDOR;
+                const month = row.Month || row.month || row.MONTH;
+                const year = row.Year || row.year || row.YEAR;
+                const vret = row.VRET || row.vret || row.Vret;
+                const cogs = row.COGS || row.cogs || row.Cogs;
+
+                // Log first few rows for debugging
+                if (index < 3) {
+                    console.log(`Row ${index + 1} data:`, { vendor, month, year, vret, cogs });
+                }
+
+                // Validate required fields
+                if (!vendor || !month || !year) {
+                    if (index < 10) {  // Log first 10 skips
+                        console.log(`Row ${index + 1}: Skipped - missing vendor, month, or year`,
+                            { vendor, month, year, rawRow: row });
+                    }
+                    skippedCount++;
+                    return;
+                }
+
+                const vendorKey = vendor.toString().toLowerCase().trim();
+
+                // Check if vendor exists
+                if (!state.savedVretCogs[vendorKey]) {
+                    if (skippedCount < 5) {  // Log first 5 unknown vendors
+                        console.warn(`Row ${index + 1}: Unknown vendor "${vendorKey}" (original: "${vendor}")`,
+                            '\nExpected one of: etrade, retailez, clicktech',
+                            '\nRaw row:', row);
+                    }
+                    skippedCount++;
+                    return;
+                }
+
+                // Add to state
+                const entry = {
+                    id: idCounter[vendorKey]++,
+                    month: month.toString().padStart(2, '0'),  // Ensure 2-digit format
+                    year: year.toString(),
+                    vret: parseFloat(vret) || 0,
+                    cogs: parseFloat(cogs) || 0
+                };
+
+                state.savedVretCogs[vendorKey].push(entry);
+                loadedCount++;
+
+                // Log first few entries for verification
+                if (loadedCount <= 3) {
+                    console.log(`✓ Loaded entry ${loadedCount}:`, entry);
+                }
+            });
+
+            console.log('✅ VRET & COGS load complete:');
+            console.log(`   Total rows in sheet: ${data.length}`);
+            console.log(`   Successfully loaded: ${loadedCount} entries`);
+            console.log(`   Skipped: ${skippedCount} entries`);
+            console.log('   Breakdown by vendor:', {
+                etrade: state.savedVretCogs.etrade.length,
+                retailez: state.savedVretCogs.retailez.length,
+                clicktech: state.savedVretCogs.clicktech.length
+            });
+
+            if (skippedCount === data.length) {
+                console.error('⚠️ ALL ROWS WERE SKIPPED! Check:');
+                console.error('   1. Vendor column has values: "etrade", "retailez", or "clicktech"');
+                console.error('   2. Month and Year columns are not empty');
+                console.error('   3. Column names match (case-insensitive): Vendor, Month, Year, VRET, COGS');
+            }
+
+            if (loadedCount > 0) {
+                saveData();
+                render();
+                showNotification(`✅ Loaded ${loadedCount} VRET & COGS entries`, 'success');
+            } else {
+                showNotification('⚠️ No valid VRET & COGS entries found - check console for details', 'warning');
+            }
+
+            return data;
+        } catch (error) {
+            console.error('❌ Error loading VRET & COGS:', error);
+            console.error('Error details:', error.message);
+            console.error('Stack trace:', error.stack);
+            showNotification('❌ Error loading VRET & COGS: ' + error.message, 'error');
+            throw error;
+        }
+    },
+
     // Save all data for ALL vendors
     async saveAllForVendor() {
         if (!this.config.appsScriptUrl) {
@@ -5602,9 +5721,29 @@ async loadAdvertising() {
             if (allAdRows.length > 0) {
                 await this.saveSheet('Advertising', allAdRows);
             }
-            
-            showNotification(`✅ Saved ${allAsinRows.length} ASINs, ${allInvoiceRows.length} invoices, ${allAdRows.length} ads!`, 'success');
-            console.log('Save summary:', { asins: allAsinRows.length, invoices: allInvoiceRows.length, ads: allAdRows.length });
+
+            // Save VRET & COGS
+            const allVretCogsRows = [];
+            ['etrade', 'retailez', 'clicktech'].forEach(vendor => {
+                const vretCogsData = state.savedVretCogs[vendor] || [];
+                vretCogsData.forEach(item => {
+                    if (item.month && item.year) {
+                        allVretCogsRows.push([
+                            vendor,
+                            item.month,
+                            item.year,
+                            parseFloat(item.vret) || 0,
+                            parseFloat(item.cogs) || 0
+                        ]);
+                    }
+                });
+            });
+            if (allVretCogsRows.length > 0) {
+                await this.saveSheet('VRET_COGS', allVretCogsRows);
+            }
+
+            showNotification(`✅ Saved ${allAsinRows.length} ASINs, ${allInvoiceRows.length} invoices, ${allAdRows.length} ads, ${allVretCogsRows.length} VRET/COGS!`, 'success');
+            console.log('Save summary:', { asins: allAsinRows.length, invoices: allInvoiceRows.length, ads: allAdRows.length, vretCogs: allVretCogsRows.length });
         } catch (error) {
             console.error('Save error:', error);
             showNotification('❌ Error saving: ' + error.message, 'error');
@@ -5619,12 +5758,13 @@ async loadAdvertising() {
         }
 
         showNotification('📥 Loading from Google Sheets...', 'info');
-        
+
         try {
             await this.loadAsinMaster();
             await this.loadInvoices();
             await this.loadAdvertising();
-            
+            await this.loadVretCogs();
+
             showNotification('✅ Data loaded successfully!', 'success');
         } catch (error) {
             showNotification('❌ Error loading: ' + error.message, 'error');
