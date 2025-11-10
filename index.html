@@ -8,9 +8,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <!-- Google Sheets API -->
-    <script src="https://apis.google.com/js/api.js"></script>
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <!-- Supabase SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         :root {
             --primary: #3b82f6;
@@ -1065,85 +1064,10 @@
     </style>
 </head>
 <body>
-    <!-- Google Sheets Connection Status -->
-    <div id="sheetsConnection" class="sheets-connection disconnected">
-        <div class="status-dot disconnected"></div>
-        <span id="connectionStatus">Sheets: Off</span>
-        <button class="btn btn-primary" onclick="openSheetsSetup()" style="padding: 0.5rem 0.875rem; font-size: 0.8125rem;">
-            Setup
-        </button>
-    </div>
-
-    <!-- Google Sheets Setup Modal -->
-    <div id="sheetsSetupModal" class="sheets-modal">
-        <div class="sheets-modal-content">
-            <h2 style="margin-bottom: 1rem; background: linear-gradient(135deg, var(--primary) 0%, var(--purple) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-size: 1.75rem; font-weight: 800;">
-                🔗 Connect Google Sheets Database
-            </h2>
-            
-            <div class="integration-card">
-                <h3>📋 Step 1: Create Google Sheet</h3>
-                <ol style="font-size: 0.875rem; color: var(--gray-700);">
-                    <li>Go to <a href="https://sheets.google.com" target="_blank" style="color: var(--primary); font-weight: 600;">sheets.google.com</a></li>
-                    <li>Create new spreadsheet: "P&L Database"</li>
-                    <li>Create 3 tabs: <strong>ASIN_Master</strong>, <strong>Invoices</strong>, <strong>Advertising</strong></li>
-                </ol>
-            </div>
-
-            <div class="integration-card">
-                <h3>📊 Step 2: Add Headers (Row 1)</h3>
-                <p style="font-weight: 600; margin-bottom: 0.5rem; font-size: 0.875rem;">ASIN_Master:</p>
-                <div class="code-block">Vendor | ASIN | Price</div>
-                
-                <p style="font-weight: 600; margin-bottom: 0.5rem; margin-top: 1rem; font-size: 0.875rem;">Invoices:</p>
-                <div class="code-block">Vendor | Date | Invoice ID | ASIN | Quantity | Item Price | Freight Cost</div>
-                
-                <p style="font-weight: 600; margin-bottom: 0.5rem; margin-top: 1rem; font-size: 0.875rem;">Advertising:</p>
-                <div class="code-block">Vendor | Date | ASIN | Spend | Sales | Orders | Clicks | Impressions</div>
-            </div>
-
-            <div class="integration-card">
-                <h3>🔗 Step 3: Share Your Sheet</h3>
-                <ol style="font-size: 0.875rem; color: var(--gray-700);">
-                    <li>Click "Share" button (top right)</li>
-                    <li>Change to "Anyone with the link"</li>
-                    <li>Set permissions to "Editor"</li>
-                    <li>Copy the share link</li>
-                </ol>
-            </div>
-
-            <div style="margin: 1.5rem 0;">
-                <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; font-size: 0.875rem;">
-                    Google Sheets URL:
-                </label>
-                <input 
-                    type="url" 
-                    id="sheetsUrlInput" 
-                    placeholder="https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit"
-                    style="width: 100%; padding: 0.75rem; border: 2px solid var(--gray-200); border-radius: var(--radius-sm); font-size: 0.9375rem;">
-            </div>
-
-            <div class="integration-card" style="border-left-color: var(--warning); background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);">
-                <h3>🚀 Step 4: Enable Write Access (Optional)</h3>
-                <p style="font-size: 0.875rem; margin-bottom: 0.5rem;">For saving data back to sheets, deploy the Apps Script:</p>
-                <ol style="font-size: 0.875rem; color: var(--gray-700);">
-                    <li>In your sheet: Extensions → Apps Script</li>
-                    <li>Paste the GoogleAppsScript.gs code</li>
-                    <li>Deploy → New deployment → Web app</li>
-                    <li>Set "Who has access" to "Anyone"</li>
-                </ol>
-                <input 
-                    type="url" 
-                    id="appsScriptUrlInput" 
-                    placeholder="https://script.google.com/macros/s/.../exec (optional)"
-                    style="width: 100%; padding: 0.75rem; border: 2px solid var(--gray-200); border-radius: var(--radius-sm); margin-top: 0.75rem; font-size: 0.9375rem;">
-            </div>
-
-            <div style="display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 2rem;">
-                <button class="btn btn-secondary" onclick="closeSheetsSetup()">Cancel</button>
-                <button class="btn btn-primary" onclick="connectGoogleSheets()">Connect Database</button>
-            </div>
-        </div>
+    <!-- Database Connection Status -->
+    <div id="dbConnection" class="sheets-connection connected">
+        <div class="status-dot connected"></div>
+        <span id="connectionStatus">Supabase: Connected ✓</span>
     </div>
 
     <div class="header">
@@ -5127,11 +5051,17 @@ window.processAdvertisingFile = processAdvertisingFile;
         console.log('✓ Top/Low performing ASINs (7 days) ready');
 
         // ================================================
-        // GOOGLE SHEETS DATABASE INTEGRATION
-        // PRE-CONFIGURED FOR AUTO-SYNC
+        // SUPABASE DATABASE INTEGRATION
         // ================================================
 
-const GoogleSheetsDB = {
+// Initialize Supabase Client
+const supabaseUrl = 'https://oqjcbjgidnybvvzecrhg.supabase.co';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9xamNiamdpZG55YnZ2emVjcmhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI0MTA2NzMsImV4cCI6MjA3Nzk4NjY3M30.gNC-L__uk2DxFb-29hYmE-O_WDqSTyr0TawF8AK08k0';
+const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+
+console.log('✅ Supabase client initialized');
+
+const SupabaseDB = {
     config: {
         spreadsheetId: '1sOkFPyiPXvPsciScXGHfOhPc8Dg4NdmXJmtSIpprwR8',
         appsScriptUrl: 'https://script.google.com/macros/s/AKfycbz4O-kGaNvRapwZ-oAtnJQ7fHYvhx6z4ksyp_wgju5Mw50yI8ccTLPMegGJWIegTWJv/exec',
