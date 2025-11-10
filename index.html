@@ -5086,7 +5086,7 @@ const GoogleSheetsDB = {
             this.config.spreadsheetId = '1sOkFPyiPXvPsciScXGHfOhPc8Dg4NdmXJmtSIpprwR8';
         }
         if (!this.config.appsScriptUrl) {
-            this.config.appsScriptUrl = ' https://script.google.com/macros/s/AKfycbz4O-kGaNvRapwZ-oAtnJQ7fHYvhx6z4ksyp_wgju5Mw50yI8ccTLPMegGJWIegTWJv/exec';
+            this.config.appsScriptUrl = 'https://script.google.com/macros/s/AKfycbz4O-kGaNvRapwZ-oAtnJQ7fHYvhx6z4ksyp_wgju5Mw50yI8ccTLPMegGJWIegTWJv/exec';
         }
         this.config.connected = true;
         this.save();
@@ -5168,19 +5168,26 @@ const GoogleSheetsDB = {
         }
 
         const url = `${this.config.appsScriptUrl}?action=read&sheet=${sheetName}`;
-        
+
         try {
             const response = await fetch(url);
+
+            // Check HTTP status
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
+            }
+
             const data = await response.json();
-            
+
             if (!data.success) {
                 throw new Error(data.error || 'Failed to load data');
             }
-            
+
             console.log(`✓ Loaded ${sheetName}:`, data.rows.length, 'rows');
             return data.rows;
         } catch (error) {
             console.error(`Error loading ${sheetName}:`, error);
+            showNotification(`❌ Error loading ${sheetName}: ${error.message}`, 'error');
             throw error;
         }
     },
@@ -5204,6 +5211,8 @@ const GoogleSheetsDB = {
 
             const fullData = [headers, ...data];
 
+            // Note: Using no-cors mode means we cannot read the response
+            // This is necessary for Google Apps Script cross-origin requests
             const response = await fetch(this.config.appsScriptUrl, {
                 method: 'POST',
                 mode: 'no-cors',
@@ -5217,12 +5226,13 @@ const GoogleSheetsDB = {
                 })
             });
 
-            console.log(`✓ ${sheetName} saved:`, data.length, 'rows');
-            showNotification(`✓ ${sheetName} saved to Google Sheets`, 'success');
+            // With no-cors, we can only verify the request was sent, not if it succeeded
+            console.log(`✓ ${sheetName} save request sent:`, data.length, 'rows');
+            showNotification(`✓ ${sheetName} save request sent to Google Sheets`, 'success');
             return true;
         } catch (error) {
             console.error(`Error saving ${sheetName}:`, error);
-            showNotification(`❌ Error saving ${sheetName}`, 'error');
+            showNotification(`❌ Error saving ${sheetName}: ${error.message}`, 'error');
             return false;
         }
     },
@@ -5313,17 +5323,18 @@ const GoogleSheetsDB = {
     // Load Advertising data - FIXED FOR YOUR SHEET STRUCTURE
 async loadAdvertising() {
     try {
+        console.log('🔍 Starting loadAdvertising...');
         const data = await this.loadSheet('Advertising');
         console.log('📊 Raw Advertising data loaded:', data.length, 'rows');
-        
+
         if (data.length === 0) {
             console.warn('⚠️ No advertising data in sheet');
             showNotification('⚠️ No advertising data found in sheet', 'warning');
             return [];
         }
-        
-        // Log first row to see structure
-        console.log('First row sample:', data[0]);
+
+        // Log first few rows to see structure
+        console.log('First 3 rows sample:', data.slice(0, 3));
         console.log('Available columns:', Object.keys(data[0]));
         
         // Clear all vendor data
@@ -5347,19 +5358,30 @@ async loadAdvertising() {
             const orders = row.Orders || row.orders || row.ORDERS;
             const clicks = row.Clicks || row.clicks || row.CLICKS;
             const impressions = row.Impressions || row.impressions || row.IMPRESSIONS;
-            
+
+            // Log first few rows for debugging
+            if (index < 3) {
+                console.log(`Row ${index + 1} data:`, { vendor, asin, dateVal, spend, sales });
+            }
+
             // Validate required fields
             if (!vendor || !asin) {
-                console.log(`Row ${index + 1}: Skipped - missing vendor or ASIN`, { vendor, asin });
+                if (index < 10) {  // Log first 10 skips
+                    console.log(`Row ${index + 1}: Skipped - missing vendor or ASIN`, { vendor, asin, rawRow: row });
+                }
                 skippedCount++;
                 return;
             }
-            
+
             const vendorKey = vendor.toString().toLowerCase().trim();
-            
-            // Check if vendor exists
+
+            // Check if vendor exists - with better error reporting
             if (!state.advertisingData[vendorKey]) {
-                console.warn(`Row ${index + 1}: Unknown vendor "${vendorKey}" - skipping`);
+                if (skippedCount < 5) {  // Log first 5 unknown vendors
+                    console.warn(`Row ${index + 1}: Unknown vendor "${vendorKey}" (original: "${vendor}")`,
+                        '\nExpected one of: etrade, retailez, clicktech',
+                        '\nRaw row:', row);
+                }
                 skippedCount++;
                 return;
             }
@@ -5411,26 +5433,35 @@ async loadAdvertising() {
         });
         
         console.log('✅ Advertising load complete:');
-        console.log(`   Loaded: ${loadedCount} entries`);
+        console.log(`   Total rows in sheet: ${data.length}`);
+        console.log(`   Successfully loaded: ${loadedCount} entries`);
         console.log(`   Skipped: ${skippedCount} entries`);
-        console.log('   By vendor:', {
+        console.log('   Breakdown by vendor:', {
             etrade: state.advertisingData.etrade.length,
             retailez: state.advertisingData.retailez.length,
             clicktech: state.advertisingData.clicktech.length
         });
-        
+
+        if (skippedCount === data.length) {
+            console.error('⚠️ ALL ROWS WERE SKIPPED! Check:');
+            console.error('   1. Vendor column has values: "etrade", "retailez", or "clicktech"');
+            console.error('   2. ASIN column is not empty');
+            console.error('   3. Column names match (case-insensitive): Vendor, ASIN, Date, Spend, Sales, Orders, Clicks, Impressions');
+        }
+
         if (loadedCount > 0) {
             saveData();
             render();
             showNotification(`✅ Loaded ${loadedCount} advertising entries`, 'success');
         } else {
-            showNotification('⚠️ No valid advertising entries found', 'warning');
+            showNotification('⚠️ No valid advertising entries found - check console for details', 'warning');
         }
-        
+
         return data;
     } catch (error) {
         console.error('❌ Error loading Advertising:', error);
         console.error('Error details:', error.message);
+        console.error('Stack trace:', error.stack);
         showNotification('❌ Error loading advertising: ' + error.message, 'error');
         throw error;
     }
