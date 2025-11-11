@@ -1378,17 +1378,33 @@
             try {
                 console.log('💾 Saving all data to Supabase...');
 
-                const vendor = state.selectedVendor;
+                const vendors = ['etrade', 'retailez', 'clicktech'];
 
-                // Save all data types for current vendor
-                await Promise.all([
-                    SupabaseDB.saveAsinMaster(vendor, state.asinData[vendor]),
-                    SupabaseDB.saveInvoices(vendor, state.savedInvoices[vendor]),
-                    SupabaseDB.saveAdvertising(vendor, state.advertisingData[vendor]),
-                    SupabaseDB.saveVretCogs(vendor, state.savedVretCogs[vendor])
-                ]);
+                // Save all data types for ALL vendors
+                const savePromises = [];
 
-                console.log('✅ Data saved to Supabase');
+                for (const vendor of vendors) {
+                    // Only save if vendor has data
+                    const hasData =
+                        (state.asinData[vendor] && state.asinData[vendor].length > 0) ||
+                        (state.savedInvoices[vendor] && state.savedInvoices[vendor].length > 0) ||
+                        (state.advertisingData[vendor] && state.advertisingData[vendor].length > 0) ||
+                        (state.savedVretCogs[vendor] && state.savedVretCogs[vendor].length > 0);
+
+                    if (hasData) {
+                        console.log(`Saving ${vendor} data...`);
+                        savePromises.push(
+                            SupabaseDB.saveAsinMaster(vendor, state.asinData[vendor] || []),
+                            SupabaseDB.saveInvoices(vendor, state.savedInvoices[vendor] || []),
+                            SupabaseDB.saveAdvertising(vendor, state.advertisingData[vendor] || []),
+                            SupabaseDB.saveVretCogs(vendor, state.savedVretCogs[vendor] || [])
+                        );
+                    }
+                }
+
+                await Promise.all(savePromises);
+
+                console.log('✅ Data saved to Supabase for all vendors');
                 showNotification('✅ Data saved successfully!', 'success');
             } catch (error) {
                 console.error('Error saving data:', error);
