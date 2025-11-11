@@ -3878,6 +3878,12 @@ window.processAdvertisingFile = processAdvertisingFile;
             const ads = state.advertisingData[state.selectedVendor] || [];
             const vretCogsData = state.savedVretCogs[state.selectedVendor] || [];
 
+            // Debug logging
+            console.log('📊 Monthly P&L Debug:');
+            console.log('Selected Vendor:', state.selectedVendor);
+            console.log('VRET & COGS Data:', vretCogsData);
+            console.log('Number of VRET & COGS entries:', vretCogsData.length);
+
             Object.keys(monthlyData).forEach(key => {
                 const data = monthlyData[key];
 
@@ -3893,9 +3899,22 @@ window.processAdvertisingFile = processAdvertisingFile;
                 // Get VRET & COGS for this month
                 const monthStr = String(data.monthIndex + 1).padStart(2, '0'); // Convert 0-11 to 01-12
                 const yearStr = String(data.year);
-                const vretCogsEntry = vretCogsData.find(vc =>
-                    vc.month === monthStr && vc.year === yearStr
-                );
+
+                console.log(`Looking for: Month=${monthStr}, Year=${yearStr}`);
+
+                const vretCogsEntry = vretCogsData.find(vc => {
+                    const matches = vc.month === monthStr && vc.year === yearStr;
+                    if (vc.month === monthStr || vc.year === yearStr) {
+                        console.log(`  Checking entry: month=${vc.month}, year=${vc.year}, matches=${matches}`);
+                    }
+                    return matches;
+                });
+
+                if (vretCogsEntry) {
+                    console.log(`✓ Found VRET & COGS for ${monthStr}/${yearStr}:`, vretCogsEntry);
+                } else {
+                    console.log(`✗ No VRET & COGS found for ${monthStr}/${yearStr}`);
+                }
 
                 data.vret = vretCogsEntry ? (parseFloat(vretCogsEntry.vret) || 0) : 0;
                 data.cogs = vretCogsEntry ? (parseFloat(vretCogsEntry.cogs) || 0) : 0;
@@ -4629,18 +4648,23 @@ window.processAdvertisingFile = processAdvertisingFile;
                 
                 const rows = tbody.getElementsByTagName('tr');
                 let visibleCount = 0;
-                
+
                 for (let i = 0; i < rows.length; i++) {
                     const row = rows[i];
-                    
-                    // Get actual input values instead of textContent
+
+                    // Get both input values AND text content
                     const inputs = row.getElementsByTagName('input');
                     let searchableText = '';
+
+                    // Add input values
                     for (let j = 0; j < inputs.length; j++) {
                         searchableText += (inputs[j].value || '') + ' ';
                     }
+
+                    // Add text content from table cells
+                    searchableText += row.textContent || '';
                     searchableText = searchableText.toLowerCase();
-                    
+
                     if (searchableText.includes(searchTerm)) {
                         row.style.display = '';
                         visibleCount++;
@@ -4648,7 +4672,7 @@ window.processAdvertisingFile = processAdvertisingFile;
                         row.style.display = 'none';
                     }
                 }
-                
+
                 // Show filter info
                 let filterInfo = table.parentElement.parentElement.querySelector('.filter-info');
                 if (!filterInfo) {
@@ -4656,7 +4680,7 @@ window.processAdvertisingFile = processAdvertisingFile;
                     filterInfo.className = 'filter-info';
                     table.parentElement.parentElement.insertBefore(filterInfo, table.parentElement.nextSibling);
                 }
-                
+
                 if (searchTerm) {
                     filterInfo.textContent = `Showing ${visibleCount} of ${rows.length} invoices`;
                     filterInfo.style.display = 'block';
@@ -4693,18 +4717,23 @@ window.processAdvertisingFile = processAdvertisingFile;
                 
                 const rows = tbody.getElementsByTagName('tr');
                 let visibleCount = 0;
-                
+
                 for (let i = 0; i < rows.length; i++) {
                     const row = rows[i];
-                    
-                    // Get actual input values instead of textContent
+
+                    // Get both input values AND text content
                     const inputs = row.getElementsByTagName('input');
                     let searchableText = '';
+
+                    // Add input values
                     for (let j = 0; j < inputs.length; j++) {
                         searchableText += (inputs[j].value || '') + ' ';
                     }
+
+                    // Add text content from table cells
+                    searchableText += row.textContent || '';
                     searchableText = searchableText.toLowerCase();
-                    
+
                     if (searchableText.includes(searchTerm)) {
                         row.style.display = '';
                         visibleCount++;
@@ -4712,7 +4741,7 @@ window.processAdvertisingFile = processAdvertisingFile;
                         row.style.display = 'none';
                     }
                 }
-                
+
                 // Show filter info
                 let filterInfo = table.parentElement.parentElement.querySelector('.filter-info');
                 if (!filterInfo) {
@@ -4720,7 +4749,7 @@ window.processAdvertisingFile = processAdvertisingFile;
                     filterInfo.className = 'filter-info';
                     table.parentElement.parentElement.insertBefore(filterInfo, table.parentElement.nextSibling);
                 }
-                
+
                 if (searchTerm) {
                     filterInfo.textContent = `Showing ${visibleCount} of ${rows.length} entries`;
                     filterInfo.style.display = 'block';
@@ -4823,18 +4852,23 @@ window.processAdvertisingFile = processAdvertisingFile;
                 
                 const rows = tbody.getElementsByTagName('tr');
                 let visibleCount = 0;
-                
+
                 for (let i = 0; i < rows.length; i++) {
                     const row = rows[i];
-                    
-                    // Get actual input values instead of textContent
+
+                    // Get both input values AND text content
                     const inputs = row.getElementsByTagName('input');
                     let searchableText = '';
+
+                    // Add input values
                     for (let j = 0; j < inputs.length; j++) {
                         searchableText += (inputs[j].value || '') + ' ';
                     }
+
+                    // Add text content from table cells
+                    searchableText += row.textContent || '';
                     searchableText = searchableText.toLowerCase();
-                    
+
                     if (searchableText.includes(searchTerm)) {
                         row.style.display = '';
                         visibleCount++;
@@ -4842,7 +4876,7 @@ window.processAdvertisingFile = processAdvertisingFile;
                         row.style.display = 'none';
                     }
                 }
-                
+
                 console.log(`${tableId}: Showing ${visibleCount} of ${rows.length} rows`);
             } catch (error) {
                 console.error(`Error in filterDashboardTable for ${tableId}:`, error);
