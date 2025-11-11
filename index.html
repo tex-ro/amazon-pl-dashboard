@@ -1061,16 +1061,181 @@
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
+
+        /* Authentication Styles */
+        .auth-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+
+        .auth-box {
+            background: white;
+            border-radius: var(--radius);
+            padding: 3rem;
+            box-shadow: var(--shadow-xl);
+            width: 100%;
+            max-width: 420px;
+            animation: fadeInUp 0.5s ease;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .auth-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .auth-header h1 {
+            font-size: 2rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem;
+        }
+
+        .auth-header p {
+            color: var(--gray-600);
+            font-size: 0.9375rem;
+        }
+
+        .auth-form h2 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+            color: var(--gray-900);
+            text-align: center;
+        }
+
+        .auth-input {
+            width: 100%;
+            padding: 0.875rem;
+            border: 2px solid var(--gray-200);
+            border-radius: var(--radius-sm);
+            font-size: 1rem;
+            margin-bottom: 1rem;
+            transition: border-color 0.2s;
+        }
+
+        .auth-input:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .btn-block {
+            width: 100%;
+            padding: 1rem;
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+        .auth-switch {
+            text-align: center;
+            margin-top: 1.5rem;
+            color: var(--gray-600);
+            font-size: 0.9375rem;
+        }
+
+        .auth-switch a {
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .auth-switch a:hover {
+            text-decoration: underline;
+        }
+
+        .auth-message {
+            margin-top: 1rem;
+            padding: 1rem;
+            border-radius: var(--radius-sm);
+            font-size: 0.875rem;
+            text-align: center;
+            display: none;
+        }
+
+        .auth-message.success {
+            background: #d1fae5;
+            color: #065f46;
+            display: block;
+        }
+
+        .auth-message.error {
+            background: #fee2e2;
+            color: #991b1b;
+            display: block;
+        }
+
+        .auth-message.info {
+            background: #dbeafe;
+            color: #1e40af;
+            display: block;
+        }
     </style>
 </head>
 <body>
-    <!-- Database Connection Status -->
-    <div id="dbConnection" class="sheets-connection connected">
-        <div class="status-dot connected"></div>
-        <span id="connectionStatus">Supabase: Connected ✓</span>
+    <!-- Authentication Container (shown when not logged in) -->
+    <div id="authContainer" class="auth-container" style="display: none;">
+        <div class="auth-box">
+            <div class="auth-header">
+                <h1>🔐 P&L Management</h1>
+                <p>Sign in to access your data</p>
+            </div>
+
+            <!-- Login Form -->
+            <div id="loginForm" class="auth-form">
+                <h2>Login</h2>
+                <input type="email" id="loginEmail" placeholder="Email" class="auth-input" required>
+                <input type="password" id="loginPassword" placeholder="Password" class="auth-input" required>
+                <button onclick="handleLogin()" class="btn btn-primary btn-block">Login</button>
+                <p class="auth-switch">Don't have an account? <a href="#" onclick="showSignup(); return false;">Sign Up</a></p>
+            </div>
+
+            <!-- Signup Form -->
+            <div id="signupForm" class="auth-form" style="display: none;">
+                <h2>Sign Up</h2>
+                <input type="email" id="signupEmail" placeholder="Email" class="auth-input" required>
+                <input type="password" id="signupPassword" placeholder="Password (min 6 characters)" class="auth-input" required>
+                <input type="password" id="signupConfirm" placeholder="Confirm Password" class="auth-input" required>
+                <button onclick="handleSignup()" class="btn btn-success btn-block">Create Account</button>
+                <p class="auth-switch">Already have an account? <a href="#" onclick="showLogin(); return false;">Login</a></p>
+            </div>
+
+            <div id="authMessage" class="auth-message"></div>
+        </div>
     </div>
 
-    <div class="header">
+    <!-- Main App Container (shown when logged in) -->
+    <div id="appContainer" style="display: none;">
+        <!-- Database Connection Status -->
+        <div id="dbConnection" class="sheets-connection connected">
+            <div class="status-dot connected"></div>
+            <span id="connectionStatus">Supabase: Connected ✓</span>
+            <span id="userEmail" style="margin-left: 1rem; font-size: 0.875rem;"></span>
+            <button onclick="handleLogout()" class="btn btn-secondary" style="margin-left: 1rem; padding: 0.5rem 0.875rem; font-size: 0.8125rem;">
+                Logout
+            </button>
+        </div>
+
+        <div class="header">
         <div class="header-content">
             <div class="header-title">
                 <h1>P&L Management Software</h1>
