@@ -5506,7 +5506,7 @@ const SupabaseDB = {
                 .eq('user_id', userId)
                 .eq('vendor', vendor);
 
-            // Insert new records
+            // Insert new records - get freight cost from state.freightCosts
             const records = invoiceData
                 .filter(item => item.asin && item.invoiceId)
                 .map(item => ({
@@ -5517,7 +5517,7 @@ const SupabaseDB = {
                     asin: item.asin,
                     quantity: parseInt(item.quantity) || 0,
                     item_price: parseFloat(item.itemPrice) || 0,
-                    freight_cost: parseFloat(item.freightCost) || 0
+                    freight_cost: parseFloat(state.freightCosts[vendor]?.[item.invoiceId]) || 0
                 }));
 
             if (records.length > 0) {
@@ -5525,8 +5525,13 @@ const SupabaseDB = {
                     .from('invoices')
                     .insert(records);
 
-                if (error) throw error;
+                if (error) {
+                    console.error('Error inserting invoices:', error);
+                    throw error;
+                }
                 console.log(`✅ Saved ${records.length} invoice records for ${vendor}`);
+            } else {
+                console.log(`⚠️ No invoices to save for ${vendor}`);
             }
         } catch (error) {
             console.error('Error saving Invoices:', error);
@@ -5548,17 +5553,32 @@ const SupabaseDB = {
 
             if (error) throw error;
 
-            const invoiceData = data.map((item, index) => ({
-                id: index + 1,
-                date: item.date,
-                invoiceId: item.invoice_id,
-                asin: item.asin,
-                quantity: item.quantity.toString(),
-                itemPrice: item.item_price.toString(),
-                freightCost: item.freight_cost.toString()
-            }));
+            // Initialize freight costs for this vendor
+            if (!state.freightCosts[vendor]) {
+                state.freightCosts[vendor] = {};
+            } else {
+                // Clear existing freight costs for this vendor
+                state.freightCosts[vendor] = {};
+            }
+
+            const invoiceData = data.map((item, index) => {
+                // Rebuild freight costs object
+                if (item.freight_cost && item.freight_cost > 0) {
+                    state.freightCosts[vendor][item.invoice_id] = item.freight_cost;
+                }
+
+                return {
+                    id: index + 1,
+                    date: item.date,
+                    invoiceId: item.invoice_id,
+                    asin: item.asin,
+                    quantity: item.quantity.toString(),
+                    itemPrice: item.item_price.toString()
+                };
+            });
 
             console.log(`✅ Loaded ${invoiceData.length} invoice records for ${vendor}`);
+            console.log(`✅ Rebuilt freight costs:`, Object.keys(state.freightCosts[vendor]).length, 'invoices');
             return invoiceData;
         } catch (error) {
             console.error('Error loading Invoices:', error);
