@@ -31,11 +31,25 @@ CREATE INDEX IF NOT EXISTS idx_vret_cogs_user_id ON vret_cogs(user_id);
 -- 3. UPDATE RLS POLICIES
 -- ============================================
 
--- Drop old "Allow public access" policies
-DROP POLICY IF EXISTS "Allow public access" ON asin_master;
-DROP POLICY IF EXISTS "Allow public access" ON invoices;
-DROP POLICY IF EXISTS "Allow public access" ON advertising;
-DROP POLICY IF EXISTS "Allow public access" ON vret_cogs;
+-- Enable RLS on all tables first
+ALTER TABLE asin_master ENABLE ROW LEVEL SECURITY;
+ALTER TABLE invoices ENABLE ROW LEVEL SECURITY;
+ALTER TABLE advertising ENABLE ROW LEVEL SECURITY;
+ALTER TABLE vret_cogs ENABLE ROW LEVEL SECURITY;
+
+-- Drop ALL existing policies on each table (regardless of name)
+DO $$
+DECLARE
+    pol RECORD;
+BEGIN
+    FOR pol IN
+        SELECT policyname, tablename
+        FROM pg_policies
+        WHERE tablename IN ('asin_master', 'invoices', 'advertising', 'vret_cogs')
+    LOOP
+        EXECUTE format('DROP POLICY IF EXISTS %I ON %I', pol.policyname, pol.tablename);
+    END LOOP;
+END $$;
 
 -- Create new user-specific policies for asin_master
 CREATE POLICY "Users can access own asin_master" ON asin_master
