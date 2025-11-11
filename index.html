@@ -5571,6 +5571,7 @@ const SupabaseDB = {
         try {
             const userId = this.getUserId();
             console.log(`💾 Saving Invoices for ${vendor}...`);
+            console.log(`Total invoice line items to save: ${invoiceData.length}`);
 
             // Delete existing records for this vendor
             await supabase
@@ -5579,27 +5580,46 @@ const SupabaseDB = {
                 .eq('user_id', userId)
                 .eq('vendor', vendor);
 
-            // Insert new records - get freight cost from state.freightCosts
-            const records = invoiceData
-                .filter(item => item.asin && item.invoiceId)
-                .map(item => ({
-                    user_id: userId,
-                    vendor: vendor,
-                    date: item.date,
-                    invoice_id: item.invoiceId,
-                    asin: item.asin,
-                    quantity: parseInt(item.quantity) || 0,
-                    item_price: parseFloat(item.itemPrice) || 0,
-                    freight_cost: parseFloat(state.freightCosts[vendor]?.[item.invoiceId]) || 0
-                }));
+            // Group records by invoice_id + asin to handle duplicates
+            const recordsMap = {};
+
+            invoiceData.forEach(item => {
+                if (!item.asin || !item.invoiceId) return;
+
+                const key = `${item.invoiceId}_${item.asin}`;
+
+                if (!recordsMap[key]) {
+                    // First occurrence - save it
+                    recordsMap[key] = {
+                        user_id: userId,
+                        vendor: vendor,
+                        date: item.date,
+                        invoice_id: item.invoiceId,
+                        asin: item.asin,
+                        quantity: parseInt(item.quantity) || 0,
+                        item_price: parseFloat(item.itemPrice) || 0,
+                        freight_cost: parseFloat(state.freightCosts[vendor]?.[item.invoiceId]) || 0
+                    };
+                } else {
+                    // Duplicate found - sum the quantities
+                    console.log(`⚠️ Duplicate found: Invoice ${item.invoiceId}, ASIN ${item.asin} - summing quantities`);
+                    recordsMap[key].quantity += parseInt(item.quantity) || 0;
+                }
+            });
+
+            const records = Object.values(recordsMap);
 
             if (records.length > 0) {
-                const { error } = await supabase
+                console.log(`Filtered to ${records.length} unique invoice+asin combinations`);
+
+                const { data, error } = await supabase
                     .from('invoices')
                     .insert(records);
 
                 if (error) {
                     console.error('Error inserting invoices:', error);
+                    console.error('Error details:', error.message);
+                    console.error('Failed records sample:', records.slice(0, 3));
                     throw error;
                 }
                 console.log(`✅ Saved ${records.length} invoice records for ${vendor}`);
