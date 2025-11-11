@@ -3508,8 +3508,11 @@ window.processAdvertisingFile = processAdvertisingFile;
                 const totalCost = monthlyData.reduce((sum, m) => sum + m.totalCost, 0);
                 const totalAdSpend = monthlyData.reduce((sum, m) => sum + m.adSpend, 0);
                 const totalProfit = monthlyData.reduce((sum, m) => sum + m.profit, 0);
+                const totalVretCogs = monthlyData.reduce((sum, m) => sum + m.vretCogsCombined, 0);
+                const totalFinalProfit = monthlyData.reduce((sum, m) => sum + m.finalProfit, 0);
                 const avgMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
-                const bestMonth = monthlyData.reduce((max, m) => m.profit > max.profit ? m : max, monthlyData[0]);
+                const avgFinalMargin = totalRevenue > 0 ? (totalFinalProfit / totalRevenue) * 100 : 0;
+                const bestMonth = monthlyData.reduce((max, m) => m.finalProfit > max.finalProfit ? m : max, monthlyData[0]);
 
                 html += `
                     <div class="grid grid-cols-4 mb-4">
@@ -3519,18 +3522,18 @@ window.processAdvertisingFile = processAdvertisingFile;
                             <div class="stat-subtitle">All-time</div>
                         </div>
                         <div class="stat-card" style="background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%);">
-                            <div class="stat-label">Total Ad Spend</div>
-                            <div class="stat-value">${formatCurrency(totalAdSpend)}</div>
-                            <div class="stat-subtitle">Marketing investment</div>
+                            <div class="stat-label">Total VRET & COGS</div>
+                            <div class="stat-value">${formatCurrency(totalVretCogs)}</div>
+                            <div class="stat-subtitle">Returns & Discounts</div>
                         </div>
                         <div class="stat-card" style="background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);">
-                            <div class="stat-label">Total Profit</div>
-                            <div class="stat-value">${formatCurrency(totalProfit)}</div>
-                            <div class="stat-subtitle">${avgMargin.toFixed(1)}% margin</div>
+                            <div class="stat-label">Final Profit</div>
+                            <div class="stat-value">${formatCurrency(totalFinalProfit)}</div>
+                            <div class="stat-subtitle">${avgFinalMargin.toFixed(1)}% final margin</div>
                         </div>
                         <div class="stat-card" style="background: linear-gradient(135deg, #9333ea 0%, #7e22ce 100%);">
                             <div class="stat-label">Best Month</div>
-                            <div class="stat-value">${formatCurrency(bestMonth.profit)}</div>
+                            <div class="stat-value">${formatCurrency(bestMonth.finalProfit)}</div>
                             <div class="stat-subtitle">${bestMonth.month} ${bestMonth.year}</div>
                         </div>
                     </div>
@@ -3549,8 +3552,9 @@ window.processAdvertisingFile = processAdvertisingFile;
                                         <th class="text-right">Cost</th>
                                         <th class="text-right">Ad Spend</th>
                                         <th class="text-right">Profit</th>
+                                        <th class="text-right">VRET & COGS</th>
+                                        <th class="text-right">Final Profit</th>
                                         <th class="text-right">Margin %</th>
-                                        <th class="text-right">ROI %</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -3560,17 +3564,18 @@ window.processAdvertisingFile = processAdvertisingFile;
                                             <td class="text-right text-green">${formatCurrency(month.revenue)}</td>
                                             <td class="text-right">${formatCurrency(month.totalCost)}</td>
                                             <td class="text-right text-orange">${formatCurrency(month.adSpend)}</td>
-                                            <td class="text-right ${month.profit >= 0 ? 'text-green' : 'text-red'} font-semibold">
+                                            <td class="text-right ${month.profit >= 0 ? 'text-green' : 'text-red'}">
                                                 ${formatCurrency(month.profit)}
                                             </td>
-                                            <td class="text-right">
-                                                <span class="badge ${month.marginPercent >= 20 ? 'badge-green' : month.marginPercent >= 10 ? 'badge-blue' : month.marginPercent >= 0 ? 'badge-yellow' : 'badge-red'}">
-                                                    ${month.marginPercent.toFixed(1)}%
-                                                </span>
+                                            <td class="text-right text-red">
+                                                ${formatCurrency(month.vretCogsCombined)}
+                                            </td>
+                                            <td class="text-right ${month.finalProfit >= 0 ? 'text-green' : 'text-red'} font-semibold" style="background: ${month.finalProfit >= 0 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)'};">
+                                                ${formatCurrency(month.finalProfit)}
                                             </td>
                                             <td class="text-right">
-                                                <span class="badge ${month.roi >= 50 ? 'badge-green' : month.roi >= 25 ? 'badge-blue' : month.roi >= 0 ? 'badge-yellow' : 'badge-red'}">
-                                                    ${month.roi.toFixed(1)}%
+                                                <span class="badge ${month.finalMarginPercent >= 20 ? 'badge-green' : month.finalMarginPercent >= 10 ? 'badge-blue' : month.finalMarginPercent >= 0 ? 'badge-yellow' : 'badge-red'}">
+                                                    ${month.finalMarginPercent.toFixed(1)}%
                                                 </span>
                                             </td>
                                         </tr>
@@ -3871,8 +3876,12 @@ window.processAdvertisingFile = processAdvertisingFile;
             
             // Add ad spend for each month
             const ads = state.advertisingData[state.selectedVendor] || [];
+            const vretCogsData = state.savedVretCogs[state.selectedVendor] || [];
+
             Object.keys(monthlyData).forEach(key => {
                 const data = monthlyData[key];
+
+                // Calculate ad spend
                 data.adSpend = ads
                     .filter(ad => {
                         if (!ad.date) return false;
@@ -3880,9 +3889,26 @@ window.processAdvertisingFile = processAdvertisingFile;
                         return adDate.getFullYear() === data.year && adDate.getMonth() === data.monthIndex;
                     })
                     .reduce((sum, ad) => sum + (parseFloat(ad.spend) || 0), 0);
-                
+
+                // Get VRET & COGS for this month
+                const monthStr = String(data.monthIndex + 1).padStart(2, '0'); // Convert 0-11 to 01-12
+                const yearStr = String(data.year);
+                const vretCogsEntry = vretCogsData.find(vc =>
+                    vc.month === monthStr && vc.year === yearStr
+                );
+
+                data.vret = vretCogsEntry ? (parseFloat(vretCogsEntry.vret) || 0) : 0;
+                data.cogs = vretCogsEntry ? (parseFloat(vretCogsEntry.cogs) || 0) : 0;
+                data.vretCogsCombined = data.vret + data.cogs;
+
+                // Calculate profit (revenue - cost - adSpend)
                 data.profit = data.revenue - data.totalCost - data.adSpend;
+
+                // Calculate final profit (profit - vret - cogs)
+                data.finalProfit = data.profit - data.vret - data.cogs;
+
                 data.marginPercent = data.revenue > 0 ? (data.profit / data.revenue) * 100 : 0;
+                data.finalMarginPercent = data.revenue > 0 ? (data.finalProfit / data.revenue) * 100 : 0;
                 data.roi = (data.totalCost + data.adSpend) > 0 ? (data.profit / (data.totalCost + data.adSpend)) * 100 : 0;
             });
 
