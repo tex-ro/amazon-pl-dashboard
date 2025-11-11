@@ -1397,6 +1397,37 @@
         }
 
         // Helper Functions
+        // Parse date string in multiple formats (YYYY-MM-DD, DD-MM-YYYY, etc.)
+        function parseDate(dateStr) {
+            if (!dateStr) return null;
+
+            // Try parsing as-is first (for YYYY-MM-DD format)
+            let date = new Date(dateStr);
+            if (!isNaN(date.getTime())) {
+                return date;
+            }
+
+            // Try DD-MM-YYYY or DD/MM/YYYY format
+            const parts = dateStr.split(/[-/]/);
+            if (parts.length === 3) {
+                // Check if first part is day (DD-MM-YYYY)
+                if (parseInt(parts[0]) > 12) {
+                    date = new Date(parts[2], parts[1] - 1, parts[0]);
+                    if (!isNaN(date.getTime())) {
+                        return date;
+                    }
+                }
+                // Try MM-DD-YYYY
+                date = new Date(parts[2], parts[0] - 1, parts[1]);
+                if (!isNaN(date.getTime())) {
+                    return date;
+                }
+            }
+
+            console.warn('Could not parse date:', dateStr);
+            return null;
+        }
+
         function formatCurrency(value) {
             return `₹${parseFloat(value || 0).toFixed(2)}`;
         }
@@ -3048,10 +3079,15 @@ window.processAdvertisingFile = processAdvertisingFile;
             
             currentInvoices.forEach(item => {
                 if (!item.date || !item.asin) return;
-                
-                const date = new Date(item.date);
+
+                const date = parseDate(item.date);
+                if (!date) {
+                    console.warn('Skipping invoice with invalid date:', item.date);
+                    return;
+                }
+
                 const monthYear = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-                
+
                 if (!monthlyData[monthYear]) {
                     monthlyData[monthYear] = {
                         month: date.toLocaleString('default', { month: 'long' }),
@@ -3097,7 +3133,8 @@ window.processAdvertisingFile = processAdvertisingFile;
             
             currentAds.forEach(ad => {
                 if (!ad.date) return;
-                const date = new Date(ad.date);
+                const date = parseDate(ad.date);
+                if (!date) return;
                 const monthYear = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
                 if (monthlyData[monthYear]) {
                     monthlyData[monthYear].adSpend = (monthlyData[monthYear].adSpend || 0) + (ad.spend || 0);
@@ -3716,11 +3753,12 @@ window.processAdvertisingFile = processAdvertisingFile;
             
             currentInvoices.forEach(item => {
                 if (!item.date || !item.asin) return;
-                
-                const date = new Date(item.date);
+
+                const date = parseDate(item.date);
+                if (!date) return;
                 const monthKey = `${date.getFullYear()}-${String(date.getMonth()).padStart(2, '0')}`;
                 const asinKey = `${item.asin}-${monthKey}`;
-                
+
                 if (!asinMonthlyStats[asinKey]) {
                     asinMonthlyStats[asinKey] = {
                         asin: item.asin,
@@ -3750,7 +3788,8 @@ window.processAdvertisingFile = processAdvertisingFile;
                 stat.adSpend = ads
                     .filter(ad => {
                         if (!ad.date || ad.asin !== stat.asin) return false;
-                        const adDate = new Date(ad.date);
+                        const adDate = parseDate(ad.date);
+                        if (!adDate) return false;
                         return adDate.getFullYear() === stat.year && adDate.getMonth() === stat.monthIndex;
                     })
                     .reduce((sum, ad) => sum + (parseFloat(ad.spend) || 0), 0);
@@ -3966,7 +4005,8 @@ window.processAdvertisingFile = processAdvertisingFile;
             currentInvoices.forEach(item => {
                 if (!item.date) return;
                 
-                const date = new Date(item.date);
+                const date = parseDate(item.date);
+                if (!date) return;
                 const monthKey = `${date.getFullYear()}-${String(date.getMonth()).padStart(2, '0')}`;
                 
                 if (!monthlyData[monthKey]) {
@@ -4010,7 +4050,8 @@ window.processAdvertisingFile = processAdvertisingFile;
                 data.adSpend = ads
                     .filter(ad => {
                         if (!ad.date) return false;
-                        const adDate = new Date(ad.date);
+                        const adDate = parseDate(ad.date);
+                        if (!adDate) return;
                         return adDate.getFullYear() === data.year && adDate.getMonth() === data.monthIndex;
                     })
                     .reduce((sum, ad) => sum + (parseFloat(ad.spend) || 0), 0);
@@ -4066,7 +4107,8 @@ window.processAdvertisingFile = processAdvertisingFile;
             const invoices = state.savedInvoices[state.selectedVendor] || [];
             const todayInvoices = invoices.filter(inv => {
                 if (!inv.date) return false;
-                const invDate = new Date(inv.date);
+                const invDate = parseDate(inv.date);
+                if (!invDate) return;
                 return invDate >= today && invDate < tomorrow;
             });
             
@@ -4083,7 +4125,8 @@ window.processAdvertisingFile = processAdvertisingFile;
             const adSpend = ads
                 .filter(ad => {
                     if (!ad.date) return false;
-                    const adDate = new Date(ad.date);
+                    const adDate = parseDate(ad.date);
+                    if (!adDate) return;
                     return adDate >= today && adDate < tomorrow;
                 })
                 .reduce((sum, ad) => sum + (parseFloat(ad.spend) || 0), 0);
@@ -4111,7 +4154,8 @@ window.processAdvertisingFile = processAdvertisingFile;
             const invoices = state.savedInvoices[state.selectedVendor] || [];
             const yesterdayInvoices = invoices.filter(inv => {
                 if (!inv.date) return false;
-                const invDate = new Date(inv.date);
+                const invDate = parseDate(inv.date);
+                if (!invDate) return;
                 return invDate >= yesterday && invDate < today;
             });
             
@@ -4128,7 +4172,8 @@ window.processAdvertisingFile = processAdvertisingFile;
             const adSpend = ads
                 .filter(ad => {
                     if (!ad.date) return false;
-                    const adDate = new Date(ad.date);
+                    const adDate = parseDate(ad.date);
+                    if (!adDate) return;
                     return adDate >= yesterday && adDate < today;
                 })
                 .reduce((sum, ad) => sum + (parseFloat(ad.spend) || 0), 0);
@@ -4148,7 +4193,8 @@ window.processAdvertisingFile = processAdvertisingFile;
             const invoices = state.savedInvoices[state.selectedVendor] || [];
             const weekInvoices = invoices.filter(inv => {
                 if (!inv.date) return false;
-                const invDate = new Date(inv.date);
+                const invDate = parseDate(inv.date);
+                if (!invDate) return;
                 return invDate >= weekAgo && invDate <= today;
             });
             
@@ -4180,7 +4226,8 @@ window.processAdvertisingFile = processAdvertisingFile;
                 asinStats[asin].adSpend = ads
                     .filter(ad => {
                         if (!ad.date || ad.asin !== asin) return false;
-                        const adDate = new Date(ad.date);
+                        const adDate = parseDate(ad.date);
+                        if (!adDate) return;
                         return adDate >= weekAgo && adDate <= today;
                     })
                     .reduce((sum, ad) => sum + (parseFloat(ad.spend) || 0), 0);
@@ -4266,7 +4313,8 @@ window.processAdvertisingFile = processAdvertisingFile;
             const invoices = state.savedInvoices[state.selectedVendor] || [];
             const weekInvoices = invoices.filter(inv => {
                 if (!inv.date) return false;
-                const invDate = new Date(inv.date);
+                const invDate = parseDate(inv.date);
+                if (!invDate) return;
                 return invDate >= weekAgo && invDate <= today;
             });
             
@@ -4298,7 +4346,8 @@ window.processAdvertisingFile = processAdvertisingFile;
                 asinStats[asin].adSpend = ads
                     .filter(ad => {
                         if (!ad.date || ad.asin !== asin) return false;
-                        const adDate = new Date(ad.date);
+                        const adDate = parseDate(ad.date);
+                        if (!adDate) return;
                         return adDate >= weekAgo && adDate <= today;
                     })
                     .reduce((sum, ad) => sum + (parseFloat(ad.spend) || 0), 0);
@@ -4326,7 +4375,8 @@ window.processAdvertisingFile = processAdvertisingFile;
             const invoices = state.savedInvoices[state.selectedVendor] || [];
             const weekInvoices = invoices.filter(inv => {
                 if (!inv.date) return false;
-                const invDate = new Date(inv.date);
+                const invDate = parseDate(inv.date);
+                if (!invDate) return;
                 return invDate >= weekAgo && invDate <= today;
             });
             
@@ -4358,7 +4408,8 @@ window.processAdvertisingFile = processAdvertisingFile;
                 asinStats[asin].adSpend = ads
                     .filter(ad => {
                         if (!ad.date || ad.asin !== asin) return false;
-                        const adDate = new Date(ad.date);
+                        const adDate = parseDate(ad.date);
+                        if (!adDate) return;
                         return adDate >= weekAgo && adDate <= today;
                     })
                     .reduce((sum, ad) => sum + (parseFloat(ad.spend) || 0), 0);
@@ -4400,7 +4451,8 @@ window.processAdvertisingFile = processAdvertisingFile;
                 
                 const dayInvoices = invoices.filter(inv => {
                     if (!inv.date) return false;
-                    const invDate = new Date(inv.date);
+                    const invDate = parseDate(inv.date);
+                    if (!invDate) return;
                     return invDate >= date && invDate < nextDate;
                 });
                 
@@ -4416,7 +4468,8 @@ window.processAdvertisingFile = processAdvertisingFile;
                 const adSpend = ads
                     .filter(ad => {
                         if (!ad.date) return false;
-                        const adDate = new Date(ad.date);
+                        const adDate = parseDate(ad.date);
+                        if (!adDate) return;
                         return adDate >= date && adDate < nextDate;
                     })
                     .reduce((sum, ad) => sum + (parseFloat(ad.spend) || 0), 0);
@@ -4491,7 +4544,8 @@ window.processAdvertisingFile = processAdvertisingFile;
             const invoices = state.savedInvoices[state.selectedVendor] || [];
             const weekInvoices = invoices.filter(inv => {
                 if (!inv.date) return false;
-                const invDate = new Date(inv.date);
+                const invDate = parseDate(inv.date);
+                if (!invDate) return;
                 return invDate >= weekAgo && invDate <= today;
             });
             
@@ -4523,7 +4577,8 @@ window.processAdvertisingFile = processAdvertisingFile;
                 asinStats[asin].adSpend = ads
                     .filter(ad => {
                         if (!ad.date || ad.asin !== asin) return false;
-                        const adDate = new Date(ad.date);
+                        const adDate = parseDate(ad.date);
+                        if (!adDate) return;
                         return adDate >= weekAgo && adDate <= today;
                     })
                     .reduce((sum, ad) => sum + (parseFloat(ad.spend) || 0), 0);
@@ -4551,7 +4606,8 @@ window.processAdvertisingFile = processAdvertisingFile;
             const invoices = state.savedInvoices[state.selectedVendor] || [];
             const weekInvoices = invoices.filter(inv => {
                 if (!inv.date) return false;
-                const invDate = new Date(inv.date);
+                const invDate = parseDate(inv.date);
+                if (!invDate) return;
                 return invDate >= weekAgo && invDate <= today;
             });
             
@@ -4583,7 +4639,8 @@ window.processAdvertisingFile = processAdvertisingFile;
                 asinStats[asin].adSpend = ads
                     .filter(ad => {
                         if (!ad.date || ad.asin !== asin) return false;
-                        const adDate = new Date(ad.date);
+                        const adDate = parseDate(ad.date);
+                        if (!adDate) return;
                         return adDate >= weekAgo && adDate <= today;
                     })
                     .reduce((sum, ad) => sum + (parseFloat(ad.spend) || 0), 0);
