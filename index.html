@@ -1359,86 +1359,40 @@
         };
 
         // Load data from localStorage
-        function loadData() {
-            const savedData = localStorage.getItem('pnl_data');
-            if (savedData) {
-                try {
-                    const parsed = JSON.parse(savedData);
-                    Object.assign(state, parsed);
-                } catch (e) {
-                    console.error('Error loading data:', e);
-                }
+        async function loadData() {
+            if (!currentUser) {
+                console.log('No user logged in, skipping load');
+                return;
             }
+
+            await SupabaseDB.loadAllData();
         }
 
-        // Save data to localStorage with quota handling
-        function saveData() {
+        // Save data to Supabase
+        async function saveData() {
+            if (!currentUser) {
+                console.log('No user logged in, skipping save');
+                return;
+            }
+
             try {
-                const dataString = JSON.stringify(state);
-                const dataSizeKB = (new Blob([dataString]).size / 1024).toFixed(2);
+                console.log('💾 Saving all data to Supabase...');
 
-                console.log(`💾 Saving data to localStorage (${dataSizeKB} KB)...`);
-                localStorage.setItem('pnl_data', dataString);
-                console.log('✓ Data saved successfully');
+                const vendor = state.selectedVendor;
 
+                // Save all data types for current vendor
+                await Promise.all([
+                    SupabaseDB.saveAsinMaster(vendor, state.asinData[vendor]),
+                    SupabaseDB.saveInvoices(vendor, state.savedInvoices[vendor]),
+                    SupabaseDB.saveAdvertising(vendor, state.advertisingData[vendor]),
+                    SupabaseDB.saveVretCogs(vendor, state.savedVretCogs[vendor])
+                ]);
+
+                console.log('✅ Data saved to Supabase');
+                showNotification('✅ Data saved successfully!', 'success');
             } catch (error) {
-                if (error.name === 'QuotaExceededError') {
-                    console.error('❌ localStorage quota exceeded!');
-
-                    // Try to free up space by clearing old data
-                    try {
-                        console.log('🔄 Attempting to free up space...');
-
-                        // Get current data size
-                        const dataString = JSON.stringify(state);
-                        const dataSizeMB = (new Blob([dataString]).size / 1024 / 1024).toFixed(2);
-
-                        console.log(`📊 Current data size: ${dataSizeMB} MB`);
-                        console.log('Data breakdown:', {
-                            asinData: Object.values(state.asinData).flat().length + ' items',
-                            invoiceData: Object.values(state.invoiceData).flat().length + ' items',
-                            advertisingData: Object.values(state.advertisingData).flat().length + ' items'
-                        });
-
-                        // Clear all localStorage except current data
-                        const keysToRemove = [];
-                        for (let i = 0; i < localStorage.length; i++) {
-                            const key = localStorage.key(i);
-                            if (key && key !== 'pnl_data' && key !== 'googleSheetsConfig') {
-                                keysToRemove.push(key);
-                            }
-                        }
-
-                        keysToRemove.forEach(key => {
-                            console.log(`Removing old data: ${key}`);
-                            localStorage.removeItem(key);
-                        });
-
-                        // Try saving again
-                        localStorage.setItem('pnl_data', dataString);
-                        console.log('✓ Data saved after cleanup');
-                        showNotification('✓ Data saved (freed up storage space)', 'success');
-
-                    } catch (retryError) {
-                        console.error('❌ Still cannot save - data is too large for localStorage');
-                        console.error(`Data size: ${dataSizeMB} MB (localStorage limit is typically 5-10 MB)`);
-
-                        showNotification(
-                            `❌ Cannot save: Data too large (${dataSizeMB} MB). ` +
-                            `Consider exporting to Google Sheets or downloading backup.`,
-                            'error'
-                        );
-
-                        // Suggest solutions
-                        console.log('💡 Solutions:');
-                        console.log('   1. Export data to Google Sheets (recommended)');
-                        console.log('   2. Download backup and clear old data');
-                        console.log('   3. Delete old invoices or advertising data');
-                    }
-                } else {
-                    console.error('Error saving data:', error);
-                    showNotification('❌ Error saving data: ' + error.message, 'error');
-                }
+                console.error('Error saving data:', error);
+                showNotification('❌ Error saving: ' + error.message, 'error');
             }
         }
 
@@ -5286,895 +5240,523 @@ const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
 
 console.log('✅ Supabase client initialized');
 
-const SupabaseDB = {
-    config: {
-        spreadsheetId: '1sOkFPyiPXvPsciScXGHfOhPc8Dg4NdmXJmtSIpprwR8',
-        appsScriptUrl: 'https://script.google.com/macros/s/AKfycbz4O-kGaNvRapwZ-oAtnJQ7fHYvhx6z4ksyp_wgju5Mw50yI8ccTLPMegGJWIegTWJv/exec',
-        connected: true,
-        autoSync: true
-    },
-
-    // Initialize from localStorage
-    init() {
-        this.save();
-        const saved = localStorage.getItem('googleSheetsConfig');
-        if (saved) {
-            const loadedConfig = JSON.parse(saved);
-            this.config = { ...this.config, ...loadedConfig };
-        }
-        
-        if (!this.config.spreadsheetId) {
-            this.config.spreadsheetId = '1sOkFPyiPXvPsciScXGHfOhPc8Dg4NdmXJmtSIpprwR8';
-        }
-        if (!this.config.appsScriptUrl) {
-            this.config.appsScriptUrl = 'https://script.google.com/macros/s/AKfycbz4O-kGaNvRapwZ-oAtnJQ7fHYvhx6z4ksyp_wgju5Mw50yI8ccTLPMegGJWIegTWJv/exec';
-        }
-        this.config.connected = true;
-        this.save();
-        
-        console.log('✓ Google Sheets: Pre-configured and connected');
-    },
-
-    // Save configuration
-    save() {
-        localStorage.setItem('googleSheetsConfig', JSON.stringify(this.config));
-    },
-
-    // Extract spreadsheet ID from URL
-    extractSpreadsheetId(url) {
-        const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
-        return match ? match[1] : null;
-    },
-
-    // Connect to Google Sheets
-    connect(sheetUrl, appsScriptUrl = null) {
-        const spreadsheetId = this.extractSpreadsheetId(sheetUrl);
-        
-        if (!spreadsheetId) {
-            showNotification('❌ Invalid Google Sheets URL', 'error');
-            return false;
-        }
-
-        this.config.spreadsheetId = spreadsheetId;
-        this.config.appsScriptUrl = appsScriptUrl || null;
-        this.config.connected = true;
-        
-        this.save();
-        this.updateUI(true);
-        
-        showNotification('✅ Connected to Google Sheets!', 'success');
-        return true;
-    },
-
-    // Update UI
-    updateUI(connected) {
-        const connectionDiv = document.getElementById('sheetsConnection');
-        if (!connectionDiv) return;
-
-        const statusDot = connectionDiv.querySelector('.status-dot');
-        const statusText = document.getElementById('connectionStatus');
-        const btn = connectionDiv.querySelector('button');
-
-        if (connected) {
-            connectionDiv.className = 'sheets-connection connected';
-            if (statusDot) statusDot.className = 'status-dot connected';
-            if (statusText) statusText.textContent = 'Google Sheets: Connected ✓';
-            if (btn) btn.textContent = 'Settings';
-            
-            const badge = document.getElementById('sheetsStatusBadge');
-            if (badge) {
-                badge.style.background = 'var(--success)';
-                badge.style.color = 'white';
-                badge.textContent = 'Connected ✓';
-            }
-        } else {
-            connectionDiv.className = 'sheets-connection disconnected';
-            if (statusDot) statusDot.className = 'status-dot disconnected';
-            if (statusText) statusText.textContent = 'Google Sheets: Disconnected';
-            if (btn) btn.textContent = 'Setup Database';
-            
-            const badge = document.getElementById('sheetsStatusBadge');
-            if (badge) {
-                badge.style.background = 'var(--gray-200)';
-                badge.style.color = 'var(--gray-700)';
-                badge.textContent = 'Not Connected';
-            }
-        }
-    },
-
-    // Load data from Google Sheets
-    async loadSheet(sheetName) {
-        if (!this.config.appsScriptUrl) {
-            throw new Error('Apps Script URL not configured');
-        }
-
-        const url = `${this.config.appsScriptUrl}?action=read&sheet=${sheetName}`;
-
-        try {
-            const response = await fetch(url);
-
-            // Check HTTP status
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
-            }
-
-            const data = await response.json();
-
-            if (!data.success) {
-                throw new Error(data.error || 'Failed to load data');
-            }
-
-            console.log(`✓ Loaded ${sheetName}:`, data.rows.length, 'rows');
-            return data.rows;
-        } catch (error) {
-            console.error(`Error loading ${sheetName}:`, error);
-            showNotification(`❌ Error loading ${sheetName}: ${error.message}`, 'error');
-            throw error;
-        }
-    },
-
-    // Save data to Google Sheets
-    async saveSheet(sheetName, data) {
-        if (!this.config.appsScriptUrl) {
-            showNotification('⚠️ Apps Script not configured. Data exported as CSV.', 'warning');
-            return false;
-        }
-
-        try {
-            let headers = [];
-            if (sheetName === 'ASIN_Master') {
-                headers = ['Vendor', 'ASIN', 'Price'];
-            } else if (sheetName === 'Invoices') {
-                headers = ['Vendor', 'Date', 'Invoice ID', 'ASIN', 'Quantity', 'Item Price', 'Freight Cost'];
-            } else if (sheetName === 'Advertising') {
-                headers = ['Vendor', 'Date', 'ASIN', 'Spend', 'Sales', 'Orders', 'Clicks', 'Impressions'];
-            } else if (sheetName === 'VRET_COGS') {
-                headers = ['Vendor', 'Month', 'Year', 'VRET', 'COGS'];
-            }
-
-            const fullData = [headers, ...data];
-
-            // Note: Using no-cors mode means we cannot read the response
-            // This is necessary for Google Apps Script cross-origin requests
-            const response = await fetch(this.config.appsScriptUrl, {
-                method: 'POST',
-                mode: 'no-cors',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    action: 'write',
-                    sheetName: sheetName,
-                    values: fullData
-                })
-            });
-
-            // With no-cors, we can only verify the request was sent, not if it succeeded
-            console.log(`✓ ${sheetName} save request sent:`, data.length, 'rows');
-            showNotification(`✓ ${sheetName} save request sent to Google Sheets`, 'success');
-            return true;
-        } catch (error) {
-            console.error(`Error saving ${sheetName}:`, error);
-            showNotification(`❌ Error saving ${sheetName}: ${error.message}`, 'error');
-            return false;
-        }
-    },
-
-    // Load ASIN Master data
-    async loadAsinMaster() {
-        try {
-            const data = await this.loadSheet('ASIN_Master');
-            console.log('✓ Loaded ASIN Master:', data.length, 'rows');
-            
-            state.asinData = {
-                etrade: [],
-                retailez: [],
-                clicktech: []
-            };
-            
-            let idCounter = { etrade: 1, retailez: 1, clicktech: 1 };
-            
-            data.forEach(row => {
-                const vendor = row.Vendor ? row.Vendor.toLowerCase() : '';
-                if (state.asinData[vendor]) {
-                    state.asinData[vendor].push({
-                        id: idCounter[vendor]++,
-                        asin: row.ASIN || '',
-                        price: parseFloat(row.Price) || 0
-                    });
-                }
-            });
-            
-            saveData();
-            render();
-            return data;
-        } catch (error) {
-            console.error('Error loading ASIN Master:', error);
-            throw error;
-        }
-    },
-
-    // Load Invoices data
-    async loadInvoices() {
-        try {
-            const data = await this.loadSheet('Invoices');
-            console.log('✓ Loaded Invoices:', data.length, 'rows');
-            
-            state.savedInvoices = {
-                etrade: [],
-                retailez: [],
-                clicktech: []
-            };
-            state.freightCosts = {
-                etrade: {},
-                retailez: {},
-                clicktech: {}
-            };
-            
-            let idCounter = { etrade: 1, retailez: 1, clicktech: 1 };
-            
-            data.forEach(row => {
-                const vendor = row.Vendor ? row.Vendor.toLowerCase() : '';
-                if (state.savedInvoices[vendor]) {
-                    state.savedInvoices[vendor].push({
-                        id: idCounter[vendor]++,
-                        date: row.Date || '',
-                        invoiceId: row['Invoice ID'] || '',
-                        asin: row.ASIN || '',
-                        quantity: parseInt(row.Quantity) || 0,
-                        itemPrice: parseFloat(row['Item Price']) || 0
-                    });
-                    
-                    if (row['Freight Cost']) {
-                        if (!state.freightCosts[vendor]) {
-                            state.freightCosts[vendor] = {};
-                        }
-                        state.freightCosts[vendor][row['Invoice ID']] = parseFloat(row['Freight Cost']) || 0;
-                    }
-                }
-            });
-            
-            saveData();
-            render();
-            return data;
-        } catch (error) {
-            console.error('Error loading Invoices:', error);
-            throw error;
-        }
-    },
-
-    // Load Advertising data - FIXED FOR YOUR SHEET STRUCTURE
-async loadAdvertising() {
-    try {
-        console.log('🔍 Starting loadAdvertising...');
-        const data = await this.loadSheet('Advertising');
-        console.log('📊 Raw Advertising data loaded:', data.length, 'rows');
-
-        if (data.length === 0) {
-            console.warn('⚠️ No advertising data in sheet');
-            showNotification('⚠️ No advertising data found in sheet', 'warning');
-            return [];
-        }
-
-        // Log first few rows to see structure
-        console.log('First 3 rows sample:', data.slice(0, 3));
-        console.log('Available columns:', Object.keys(data[0]));
-        
-        // Clear all vendor data
-        state.advertisingData = {
-            etrade: [],
-            retailez: [],
-            clicktech: []
-        };
-        
-        let idCounter = { etrade: 1, retailez: 1, clicktech: 1 };
-        let loadedCount = 0;
-        let skippedCount = 0;
-        
-        data.forEach((row, index) => {
-            // Get values - trying all possible column names
-            const vendor = row.Vendor || row.vendor || row.VENDOR;
-            const asin = row.ASIN || row.asin || row.Asin;
-            const dateVal = row.Date || row.date || row.DATE;
-            const spend = row.Spend || row.spend || row.SPEND;
-            const sales = row.Sales || row.sales || row.SALES;
-            const orders = row.Orders || row.orders || row.ORDERS;
-            const clicks = row.Clicks || row.clicks || row.CLICKS;
-            const impressions = row.Impressions || row.impressions || row.IMPRESSIONS;
-
-            // Log first few rows for debugging
-            if (index < 3) {
-                console.log(`Row ${index + 1} data:`, { vendor, asin, dateVal, spend, sales });
-            }
-
-            // Validate required fields
-            if (!vendor || !asin) {
-                if (index < 10) {  // Log first 10 skips
-                    console.log(`Row ${index + 1}: Skipped - missing vendor or ASIN`, { vendor, asin, rawRow: row });
-                }
-                skippedCount++;
-                return;
-            }
-
-            const vendorKey = vendor.toString().toLowerCase().trim();
-
-            // Check if vendor exists - with better error reporting
-            if (!state.advertisingData[vendorKey]) {
-                if (skippedCount < 5) {  // Log first 5 unknown vendors
-                    console.warn(`Row ${index + 1}: Unknown vendor "${vendorKey}" (original: "${vendor}")`,
-                        '\nExpected one of: etrade, retailez, clicktech',
-                        '\nRaw row:', row);
-                }
-                skippedCount++;
-                return;
-            }
-            
-            // Parse date - handle Excel date format
-            let dateStr = '';
-            if (dateVal) {
-                if (typeof dateVal === 'string') {
-                    // If already in YYYY-MM-DD format
-                    if (dateVal.match(/^\d{4}-\d{2}-\d{2}$/)) {
-                        dateStr = dateVal;
-                    } else {
-                        // Try to parse other formats
-                        const parsedDate = new Date(dateVal);
-                        if (!isNaN(parsedDate.getTime())) {
-                            dateStr = parsedDate.toISOString().split('T')[0];
-                        }
-                    }
-                } else if (typeof dateVal === 'number') {
-                    // Excel serial date number
-                    const excelDate = new Date((dateVal - 25569) * 86400 * 1000);
-                    if (!isNaN(excelDate.getTime())) {
-                        dateStr = excelDate.toISOString().split('T')[0];
-                    }
-                } else if (dateVal instanceof Date) {
-                    dateStr = dateVal.toISOString().split('T')[0];
-                }
-            }
-            
-            // Add to state
-            const entry = {
-                id: idCounter[vendorKey]++,
-                date: dateStr,
-                asin: asin.toString().trim(),
-                spend: parseFloat(spend) || 0,
-                sales: parseFloat(sales) || 0,
-                orders: parseInt(orders) || 0,
-                clicks: parseInt(clicks) || 0,
-                impressions: parseInt(impressions) || 0
-            };
-            
-            state.advertisingData[vendorKey].push(entry);
-            loadedCount++;
-            
-            // Log first few entries for verification
-            if (loadedCount <= 3) {
-                console.log(`✓ Loaded entry ${loadedCount}:`, entry);
-            }
-        });
-        
-        console.log('✅ Advertising load complete:');
-        console.log(`   Total rows in sheet: ${data.length}`);
-        console.log(`   Successfully loaded: ${loadedCount} entries`);
-        console.log(`   Skipped: ${skippedCount} entries`);
-        console.log('   Breakdown by vendor:', {
-            etrade: state.advertisingData.etrade.length,
-            retailez: state.advertisingData.retailez.length,
-            clicktech: state.advertisingData.clicktech.length
-        });
-
-        if (skippedCount === data.length) {
-            console.error('⚠️ ALL ROWS WERE SKIPPED! Check:');
-            console.error('   1. Vendor column has values: "etrade", "retailez", or "clicktech"');
-            console.error('   2. ASIN column is not empty');
-            console.error('   3. Column names match (case-insensitive): Vendor, ASIN, Date, Spend, Sales, Orders, Clicks, Impressions');
-        }
-
-        if (loadedCount > 0) {
-            saveData();
-            render();
-            showNotification(`✅ Loaded ${loadedCount} advertising entries`, 'success');
-        } else {
-            showNotification('⚠️ No valid advertising entries found - check console for details', 'warning');
-        }
-
-        return data;
-    } catch (error) {
-        console.error('❌ Error loading Advertising:', error);
-        console.error('Error details:', error.message);
-        console.error('Stack trace:', error.stack);
-        showNotification('❌ Error loading advertising: ' + error.message, 'error');
-        throw error;
-    }
-},
-
-    // Load VRET & COGS data
-    async loadVretCogs() {
-        try {
-            console.log('🔍 Starting loadVretCogs...');
-            const data = await this.loadSheet('VRET_COGS');
-            console.log('📊 Raw VRET & COGS data loaded:', data.length, 'rows');
-
-            if (data.length === 0) {
-                console.warn('⚠️ No VRET & COGS data in sheet');
-                showNotification('⚠️ No VRET & COGS data found in sheet', 'warning');
-                return [];
-            }
-
-            // Log first few rows to see structure
-            console.log('First 3 rows sample:', data.slice(0, 3));
-            console.log('Available columns:', Object.keys(data[0]));
-
-            // Clear all vendor data
-            state.savedVretCogs = {
-                etrade: [],
-                retailez: [],
-                clicktech: []
-            };
-
-            let idCounter = { etrade: 1, retailez: 1, clicktech: 1 };
-            let loadedCount = 0;
-            let skippedCount = 0;
-
-            data.forEach((row, index) => {
-                // Get values - trying all possible column names
-                const vendor = row.Vendor || row.vendor || row.VENDOR;
-                const month = row.Month || row.month || row.MONTH;
-                const year = row.Year || row.year || row.YEAR;
-                const vret = row.VRET || row.vret || row.Vret;
-                const cogs = row.COGS || row.cogs || row.Cogs;
-
-                // Log first few rows for debugging
-                if (index < 3) {
-                    console.log(`Row ${index + 1} data:`, { vendor, month, year, vret, cogs });
-                }
-
-                // Validate required fields
-                if (!vendor || !month || !year) {
-                    if (index < 10) {  // Log first 10 skips
-                        console.log(`Row ${index + 1}: Skipped - missing vendor, month, or year`,
-                            { vendor, month, year, rawRow: row });
-                    }
-                    skippedCount++;
-                    return;
-                }
-
-                const vendorKey = vendor.toString().toLowerCase().trim();
-
-                // Check if vendor exists
-                if (!state.savedVretCogs[vendorKey]) {
-                    if (skippedCount < 5) {  // Log first 5 unknown vendors
-                        console.warn(`Row ${index + 1}: Unknown vendor "${vendorKey}" (original: "${vendor}")`,
-                            '\nExpected one of: etrade, retailez, clicktech',
-                            '\nRaw row:', row);
-                    }
-                    skippedCount++;
-                    return;
-                }
-
-                // Add to state
-                const entry = {
-                    id: idCounter[vendorKey]++,
-                    month: month.toString().padStart(2, '0'),  // Ensure 2-digit format
-                    year: year.toString(),
-                    vret: parseFloat(vret) || 0,
-                    cogs: parseFloat(cogs) || 0
-                };
-
-                state.savedVretCogs[vendorKey].push(entry);
-                loadedCount++;
-
-                // Log first few entries for verification
-                if (loadedCount <= 3) {
-                    console.log(`✓ Loaded entry ${loadedCount}:`, entry);
-                }
-            });
-
-            console.log('✅ VRET & COGS load complete:');
-            console.log(`   Total rows in sheet: ${data.length}`);
-            console.log(`   Successfully loaded: ${loadedCount} entries`);
-            console.log(`   Skipped: ${skippedCount} entries`);
-            console.log('   Breakdown by vendor:', {
-                etrade: state.savedVretCogs.etrade.length,
-                retailez: state.savedVretCogs.retailez.length,
-                clicktech: state.savedVretCogs.clicktech.length
-            });
-
-            if (skippedCount === data.length) {
-                console.error('⚠️ ALL ROWS WERE SKIPPED! Check:');
-                console.error('   1. Vendor column has values: "etrade", "retailez", or "clicktech"');
-                console.error('   2. Month and Year columns are not empty');
-                console.error('   3. Column names match (case-insensitive): Vendor, Month, Year, VRET, COGS');
-            }
-
-            if (loadedCount > 0) {
-                saveData();
-                render();
-                showNotification(`✅ Loaded ${loadedCount} VRET & COGS entries`, 'success');
-            } else {
-                showNotification('⚠️ No valid VRET & COGS entries found - check console for details', 'warning');
-            }
-
-            return data;
-        } catch (error) {
-            console.error('❌ Error loading VRET & COGS:', error);
-            console.error('Error details:', error.message);
-            console.error('Stack trace:', error.stack);
-            showNotification('❌ Error loading VRET & COGS: ' + error.message, 'error');
-            throw error;
-        }
-    },
-
-    // Save all data for ALL vendors
-    async saveAllForVendor() {
-        if (!this.config.appsScriptUrl) {
-            showNotification('⚠️ Write access not configured. Use CSV export instead.', 'warning');
-            exportAllDataToCSV();
-            return;
-        }
-
-        showNotification('📤 Saving all vendors to Google Sheets...', 'info');
-        
-        try {
-            // Save ASIN Master
-            const allAsinRows = [];
-            ['etrade', 'retailez', 'clicktech'].forEach(vendor => {
-                const asinData = state.asinData[vendor] || [];
-                asinData.forEach(item => {
-                    if (item.asin && item.asin.trim()) {
-                        allAsinRows.push([vendor, item.asin.trim(), parseFloat(item.price) || 0]);
-                    }
-                });
-            });
-            if (allAsinRows.length > 0) {
-                await this.saveSheet('ASIN_Master', allAsinRows);
-            }
-            
-            // Save Invoices
-            const allInvoiceRows = [];
-            ['etrade', 'retailez', 'clicktech'].forEach(vendor => {
-                const invoiceData = state.savedInvoices[vendor] || [];
-                invoiceData.forEach(item => {
-                    if (item.asin && item.invoiceId) {
-                        allInvoiceRows.push([
-                            vendor,
-                            item.date || '',
-                            item.invoiceId || '',
-                            item.asin || '',
-                            parseInt(item.quantity) || 0,
-                            parseFloat(item.itemPrice) || 0,
-                            parseFloat(state.freightCosts[vendor]?.[item.invoiceId]) || 0
-                        ]);
-                    }
-                });
-            });
-            if (allInvoiceRows.length > 0) {
-                await this.saveSheet('Invoices', allInvoiceRows);
-            }
-            
-            // Save Advertising
-            const allAdRows = [];
-            ['etrade', 'retailez', 'clicktech'].forEach(vendor => {
-                const adData = state.advertisingData[vendor] || [];
-                adData.forEach(item => {
-                    if (item.asin && item.asin.trim()) {
-                        allAdRows.push([
-                            vendor,
-                            item.date || '',
-                            item.asin.trim(),
-                            parseFloat(item.spend) || 0,
-                            parseFloat(item.sales) || 0,
-                            parseInt(item.orders) || 0,
-                            parseInt(item.clicks) || 0,
-                            parseInt(item.impressions) || 0
-                        ]);
-                    }
-                });
-            });
-            if (allAdRows.length > 0) {
-                await this.saveSheet('Advertising', allAdRows);
-            }
-
-            // Save VRET & COGS
-            const allVretCogsRows = [];
-            ['etrade', 'retailez', 'clicktech'].forEach(vendor => {
-                const vretCogsData = state.savedVretCogs[vendor] || [];
-                vretCogsData.forEach(item => {
-                    if (item.month && item.year) {
-                        allVretCogsRows.push([
-                            vendor,
-                            item.month,
-                            item.year,
-                            parseFloat(item.vret) || 0,
-                            parseFloat(item.cogs) || 0
-                        ]);
-                    }
-                });
-            });
-            if (allVretCogsRows.length > 0) {
-                await this.saveSheet('VRET_COGS', allVretCogsRows);
-            }
-
-            showNotification(`✅ Saved ${allAsinRows.length} ASINs, ${allInvoiceRows.length} invoices, ${allAdRows.length} ads, ${allVretCogsRows.length} VRET/COGS!`, 'success');
-            console.log('Save summary:', { asins: allAsinRows.length, invoices: allInvoiceRows.length, ads: allAdRows.length, vretCogs: allVretCogsRows.length });
-        } catch (error) {
-            console.error('Save error:', error);
-            showNotification('❌ Error saving: ' + error.message, 'error');
-        }
-    },
-
-    // Load all data
-    async loadAll() {
-        if (!this.config.spreadsheetId) {
-            showNotification('❌ Not connected to Google Sheets', 'error');
-            return;
-        }
-
-        showNotification('📥 Loading from Google Sheets...', 'info');
-
-        try {
-            await this.loadAsinMaster();
-            await this.loadInvoices();
-            await this.loadAdvertising();
-            await this.loadVretCogs();
-
-            showNotification('✅ Data loaded successfully!', 'success');
-        } catch (error) {
-            showNotification('❌ Error loading: ' + error.message, 'error');
-        }
-    },
-
-    // Test connection
-    async testConnection() {
-        if (!this.config.spreadsheetId) {
-            showNotification('❌ Not connected', 'error');
-            return false;
-        }
-
-        try {
-            showNotification('🔍 Testing...', 'info');
-            await this.loadSheet('ASIN_Master');
-            showNotification('✅ Connection OK!', 'success');
-            return true;
-        } catch (error) {
-            showNotification('❌ Connection failed', 'error');
-            return false;
-        }
-    }
-};
-
-// Global functions
-window.loadFromSheets = () => GoogleSheetsDB.loadAll();
-window.saveToSheets = () => GoogleSheetsDB.saveAllForVendor();
-window.testSheetsConnection = () => GoogleSheetsDB.testConnection();
-
-// Debug function
-window.debugAdvertising = function() {
-    console.log('🔍 Advertising Data Debug:');
-    console.log('==========================================');
-    
-    ['etrade', 'retailez', 'clicktech'].forEach(vendor => {
-        const data = state.advertisingData[vendor] || [];
-        console.log(`\n${vendor.toUpperCase()}:`, data.length, 'entries');
-        
-        if (data.length > 0) {
-            console.log('First entry:', data[0]);
-            console.log('Sample ASINs:', data.slice(0, 3).map(d => d.asin));
-            console.log('Sample Dates:', data.slice(0, 3).map(d => d.date));
-        }
-    });
-    
-    console.log('\n==========================================');
-};
-
-// Initialize on page load
-GoogleSheetsDB.init();
-GoogleSheetsDB.updateUI(true);
-
-// Auto-sync on page load
-setTimeout(async () => {
-    if (GoogleSheetsDB.config.connected && GoogleSheetsDB.config.spreadsheetId) {
-        console.log('🔄 Auto-syncing from Google Sheets...');
-        try {
-            await GoogleSheetsDB.loadAll();
-            console.log('✅ Auto-sync complete!');
-        } catch (error) {
-            console.error('❌ Auto-sync failed:', error);
-        }
-    }
-}, 1000);
-
-console.log('✓ Google Sheets integration ready');
-
-// Debug functions for testing
-window.testAdLoad = async function() {
-    console.log('Testing Advertising Load...');
-    console.log('==========================================');
-    
-    try {
-        console.log('1. Checking config...');
-        console.log('   Spreadsheet ID:', GoogleSheetsDB.config.spreadsheetId);
-        console.log('   Apps Script URL:', GoogleSheetsDB.config.appsScriptUrl);
-        
-        console.log('2. Loading sheet...');
-        const rawData = await GoogleSheetsDB.loadSheet('Advertising');
-        console.log('   Loaded:', rawData.length, 'rows');
-        
-        if (rawData.length > 0) {
-            console.log('3. First row data:');
-            console.log(rawData[0]);
-            
-            console.log('4. All column names:');
-            console.log(Object.keys(rawData[0]));
-            
-            console.log('5. Sample values:');
-            console.log('   Vendor:', rawData[0].Vendor);
-            console.log('   ASIN:', rawData[0].ASIN);
-            console.log('   Date:', rawData[0].Date);
-            console.log('   Spend:', rawData[0].Spend);
-        }
-        
-        console.log('6. Current state:');
-        console.log('   etrade:', state.advertisingData.etrade.length);
-        console.log('   retailez:', state.advertisingData.retailez.length);
-        console.log('   clicktech:', state.advertisingData.clicktech.length);
-        
-        console.log('==========================================');
-        console.log('Test complete!');
-        
-    } catch (error) {
-        console.error('Error:', error);
-        console.error('Details:', error.message);
-    }
-};
-
-window.quickLoad = async function() {
-    console.log('Quick loading advertising data...');
-    try {
-        await GoogleSheetsDB.loadAdvertising();
-        console.log('Load complete!');
-        console.log('Data loaded:', {
-            etrade: state.advertisingData.etrade.length,
-            retailez: state.advertisingData.retailez.length,
-            clicktech: state.advertisingData.clicktech.length
-        });
-    } catch (error) {
-        console.error('Error:', error);
-    }
-};
-
-window.checkState = function() {
-    console.log('Current State:');
-    console.log('==========================================');
-    console.log('Advertising Data:');
-    console.log('  etrade:', state.advertisingData.etrade.length, 'entries');
-    console.log('  retailez:', state.advertisingData.retailez.length, 'entries');
-    console.log('  clicktech:', state.advertisingData.clicktech.length, 'entries');
-    
-    if (state.advertisingData.etrade.length > 0) {
-        console.log('First etrade entry:', state.advertisingData.etrade[0]);
-    }
-    console.log('==========================================');
-};
-        // UI Functions for Google Sheets Setup
-function openSheetsSetup() {
-    const modal = document.getElementById('sheetsSetupModal');
-    if (modal) {
-        modal.classList.add('active');
-        
-        const saved = localStorage.getItem('googleSheetsConfig');
-        if (saved) {
-            const config = JSON.parse(saved);
-            if (config.spreadsheetId) {
-                const url = `https://docs.google.com/spreadsheets/d/${config.spreadsheetId}/edit`;
-                const urlInput = document.getElementById('sheetsUrlInput');
-                if (urlInput) urlInput.value = url;
-            }
-            if (config.appsScriptUrl) {
-                const scriptInput = document.getElementById('appsScriptUrlInput');
-                if (scriptInput) scriptInput.value = config.appsScriptUrl;
-            }
-        }
-    }
+// ================================================
+// AUTHENTICATION FUNCTIONS
+// ================================================
+
+let currentUser = null;
+
+// Show/Hide Auth Forms
+function showLogin() {
+    document.getElementById('loginForm').style.display = 'block';
+    document.getElementById('signupForm').style.display = 'none';
+    clearAuthMessage();
 }
 
-function closeSheetsSetup() {
-    const modal = document.getElementById('sheetsSetupModal');
-    if (modal) {
-        modal.classList.remove('active');
-    }
+function showSignup() {
+    document.getElementById('loginForm').style.display = 'none';
+    document.getElementById('signupForm').style.display = 'block';
+    clearAuthMessage();
 }
 
-function connectGoogleSheets() {
-    const sheetUrl = document.getElementById('sheetsUrlInput').value.trim();
-    const appsScriptUrl = document.getElementById('appsScriptUrlInput').value.trim();
-    
-    if (!sheetUrl) {
-        showNotification('❌ Please enter Google Sheets URL', 'error');
+// Display Messages
+function showAuthMessage(message, type) {
+    const msgDiv = document.getElementById('authMessage');
+    msgDiv.textContent = message;
+    msgDiv.className = `auth-message ${type}`;
+}
+
+function clearAuthMessage() {
+    const msgDiv = document.getElementById('authMessage');
+    msgDiv.className = 'auth-message';
+    msgDiv.textContent = '';
+}
+
+// Handle Login
+async function handleLogin() {
+    const email = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value;
+
+    if (!email || !password) {
+        showAuthMessage('Please enter email and password', 'error');
         return;
     }
-    
-    const success = GoogleSheetsDB.connect(sheetUrl, appsScriptUrl);
-    
-    if (success) {
-        closeSheetsSetup();
-        
-        setTimeout(() => {
-            if (confirm('Load existing data from Google Sheets?')) {
-                GoogleSheetsDB.loadAll();
-            }
-        }, 500);
+
+    showAuthMessage('Logging in...', 'info');
+
+    try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+            email: email,
+            password: password
+        });
+
+        if (error) throw error;
+
+        currentUser = data.user;
+        console.log('✅ Login successful:', currentUser.email);
+
+        // Show main app, hide auth
+        document.getElementById('authContainer').style.display = 'none';
+        document.getElementById('appContainer').style.display = 'block';
+        document.getElementById('userEmail').textContent = currentUser.email;
+
+        // Load user's data
+        await SupabaseDB.loadAllData();
+        render();
+
+    } catch (error) {
+        console.error('Login error:', error);
+        showAuthMessage(error.message || 'Login failed', 'error');
     }
 }
 
-// Global functions
-window.loadFromSheets = () => GoogleSheetsDB.loadAll();
-window.saveToSheets = () => GoogleSheetsDB.saveAllForVendor();
-window.testSheetsConnection = () => GoogleSheetsDB.testConnection();
-window.openSheetsSetup = openSheetsSetup;
-window.closeSheetsSetup = closeSheetsSetup;
-window.connectGoogleSheets = connectGoogleSheets;
+// Handle Signup
+async function handleSignup() {
+    const email = document.getElementById('signupEmail').value.trim();
+    const password = document.getElementById('signupPassword').value;
+    const confirm = document.getElementById('signupConfirm').value;
 
-// Initialize on page load
-GoogleSheetsDB.init();
-GoogleSheetsDB.updateUI(true);
-
-// Auto-sync on page load
-setTimeout(async () => {
-    if (GoogleSheetsDB.config.connected && GoogleSheetsDB.config.spreadsheetId) {
-        console.log('🔄 Auto-syncing from Google Sheets...');
-        try {
-            await GoogleSheetsDB.loadAll();
-            console.log('✅ Auto-sync complete!');
-        } catch (error) {
-            console.error('❌ Auto-sync failed:', error);
-        }
+    if (!email || !password || !confirm) {
+        showAuthMessage('Please fill in all fields', 'error');
+        return;
     }
-}, 1000);
 
-// Debug functions
-window.testAdLoad = async function() {
-    console.log('Testing Advertising Load...');
-    try {
-        const rawData = await GoogleSheetsDB.loadSheet('Advertising');
-        console.log('Loaded:', rawData.length, 'rows');
-        if (rawData.length > 0) {
-            console.log('First row:', rawData[0]);
-            console.log('Columns:', Object.keys(rawData[0]));
-        }
-    } catch (error) {
-        console.error('Error:', error);
+    if (password.length < 6) {
+        showAuthMessage('Password must be at least 6 characters', 'error');
+        return;
     }
-};
 
-window.quickLoad = async function() {
-    console.log('Loading advertising...');
+    if (password !== confirm) {
+        showAuthMessage('Passwords do not match', 'error');
+        return;
+    }
+
+    showAuthMessage('Creating account...', 'info');
+
     try {
-        await GoogleSheetsDB.loadAdvertising();
-        console.log('✅ Complete! Data:', {
-            etrade: state.advertisingData.etrade.length,
-            retailez: state.advertisingData.retailez.length,
-            clicktech: state.advertisingData.clicktech.length
+        const { data, error } = await supabase.auth.signUp({
+            email: email,
+            password: password
         });
+
+        if (error) throw error;
+
+        showAuthMessage('Account created! Please check your email to verify.', 'success');
+
+        // Auto-login after signup (if email verification not required)
+        setTimeout(() => {
+            showLogin();
+        }, 3000);
+
     } catch (error) {
-        console.error('Error:', error);
+        console.error('Signup error:', error);
+        showAuthMessage(error.message || 'Signup failed', 'error');
+    }
+}
+
+// Handle Logout
+async function handleLogout() {
+    try {
+        const { error } = await supabase.auth.signOut();
+        if (error) throw error;
+
+        currentUser = null;
+
+        // Clear state
+        state.asinData = { etrade: [], retailez: [], clicktech: [] };
+        state.invoiceData = { etrade: [], retailez: [], clicktech: [] };
+        state.savedInvoices = { etrade: [], retailez: [], clicktech: [] };
+        state.advertisingData = { etrade: [], retailez: [], clicktech: [] };
+        state.savedVretCogs = { etrade: [], retailez: [], clicktech: [] };
+
+        // Show auth, hide app
+        document.getElementById('authContainer').style.display = 'flex';
+        document.getElementById('appContainer').style.display = 'none';
+
+        console.log('✅ Logged out');
+    } catch (error) {
+        console.error('Logout error:', error);
+        alert('Error logging out: ' + error.message);
+    }
+}
+
+// Check Auth State on Load
+async function checkAuthState() {
+    const { data: { session } } = await supabase.auth.getSession();
+
+    if (session) {
+        currentUser = session.user;
+        console.log('✅ User already logged in:', currentUser.email);
+
+        // Show main app
+        document.getElementById('authContainer').style.display = 'none';
+        document.getElementById('appContainer').style.display = 'block';
+        document.getElementById('userEmail').textContent = currentUser.email;
+
+        // Load data
+        await SupabaseDB.loadAllData();
+        render();
+    } else {
+        // Show auth screen
+        document.getElementById('authContainer').style.display = 'flex';
+        document.getElementById('appContainer').style.display = 'none';
+    }
+}
+
+// Listen for auth changes
+supabase.auth.onAuthStateChange((event, session) => {
+    console.log('Auth state changed:', event);
+    if (event === 'SIGNED_OUT') {
+        currentUser = null;
+        document.getElementById('authContainer').style.display = 'flex';
+        document.getElementById('appContainer').style.display = 'none';
+    }
+});
+
+const SupabaseDB = {
+    // Get current user ID
+    getUserId() {
+        if (!currentUser) {
+            throw new Error('No user logged in');
+        }
+        return currentUser.id;
+    },
+
+    // ============================================
+    // ASIN MASTER OPERATIONS
+    // ============================================
+
+    async saveAsinMaster(vendor, asinData) {
+        try {
+            const userId = this.getUserId();
+            console.log(`💾 Saving ASIN Master for ${vendor}...`);
+
+            // Delete existing records for this vendor
+            await supabase
+                .from('asin_master')
+                .delete()
+                .eq('user_id', userId)
+                .eq('vendor', vendor);
+
+            // Insert new records
+            const records = asinData
+                .filter(item => item.asin && item.asin.trim())
+                .map(item => ({
+                    user_id: userId,
+                    vendor: vendor,
+                    asin: item.asin.trim(),
+                    price: parseFloat(item.price) || 0
+                }));
+
+            if (records.length > 0) {
+                const { error } = await supabase
+                    .from('asin_master')
+                    .insert(records);
+
+                if (error) throw error;
+                console.log(`✅ Saved ${records.length} ASIN records for ${vendor}`);
+            }
+        } catch (error) {
+            console.error('Error saving ASIN Master:', error);
+            throw error;
+        }
+    },
+
+    async loadAsinMaster(vendor) {
+        try {
+            const userId = this.getUserId();
+            console.log(`📥 Loading ASIN Master for ${vendor}...`);
+
+            const { data, error } = await supabase
+                .from('asin_master')
+                .select('*')
+                .eq('user_id', userId)
+                .eq('vendor', vendor)
+                .order('asin');
+
+            if (error) throw error;
+
+            const asinData = data.map((item, index) => ({
+                id: index + 1,
+                asin: item.asin,
+                price: item.price.toString()
+            }));
+
+            console.log(`✅ Loaded ${asinData.length} ASIN records for ${vendor}`);
+            return asinData;
+        } catch (error) {
+            console.error('Error loading ASIN Master:', error);
+            return [];
+        }
+    },
+
+    // ============================================
+    // INVOICES OPERATIONS
+    // ============================================
+
+    async saveInvoices(vendor, invoiceData) {
+        try {
+            const userId = this.getUserId();
+            console.log(`💾 Saving Invoices for ${vendor}...`);
+
+            // Delete existing records for this vendor
+            await supabase
+                .from('invoices')
+                .delete()
+                .eq('user_id', userId)
+                .eq('vendor', vendor);
+
+            // Insert new records
+            const records = invoiceData
+                .filter(item => item.asin && item.invoiceId)
+                .map(item => ({
+                    user_id: userId,
+                    vendor: vendor,
+                    date: item.date,
+                    invoice_id: item.invoiceId,
+                    asin: item.asin,
+                    quantity: parseInt(item.quantity) || 0,
+                    item_price: parseFloat(item.itemPrice) || 0,
+                    freight_cost: parseFloat(item.freightCost) || 0
+                }));
+
+            if (records.length > 0) {
+                const { error } = await supabase
+                    .from('invoices')
+                    .insert(records);
+
+                if (error) throw error;
+                console.log(`✅ Saved ${records.length} invoice records for ${vendor}`);
+            }
+        } catch (error) {
+            console.error('Error saving Invoices:', error);
+            throw error;
+        }
+    },
+
+    async loadInvoices(vendor) {
+        try {
+            const userId = this.getUserId();
+            console.log(`📥 Loading Invoices for ${vendor}...`);
+
+            const { data, error } = await supabase
+                .from('invoices')
+                .select('*')
+                .eq('user_id', userId)
+                .eq('vendor', vendor)
+                .order('date', { ascending: false });
+
+            if (error) throw error;
+
+            const invoiceData = data.map((item, index) => ({
+                id: index + 1,
+                date: item.date,
+                invoiceId: item.invoice_id,
+                asin: item.asin,
+                quantity: item.quantity.toString(),
+                itemPrice: item.item_price.toString(),
+                freightCost: item.freight_cost.toString()
+            }));
+
+            console.log(`✅ Loaded ${invoiceData.length} invoice records for ${vendor}`);
+            return invoiceData;
+        } catch (error) {
+            console.error('Error loading Invoices:', error);
+            return [];
+        }
+    },
+
+    // ============================================
+    // ADVERTISING OPERATIONS
+    // ============================================
+
+    async saveAdvertising(vendor, adData) {
+        try {
+            const userId = this.getUserId();
+            console.log(`💾 Saving Advertising for ${vendor}...`);
+
+            // Delete existing records for this vendor
+            await supabase
+                .from('advertising')
+                .delete()
+                .eq('user_id', userId)
+                .eq('vendor', vendor);
+
+            // Insert new records
+            const records = adData
+                .filter(item => item.asin && item.asin.trim())
+                .map(item => ({
+                    user_id: userId,
+                    vendor: vendor,
+                    date: item.date,
+                    asin: item.asin.trim(),
+                    spend: parseFloat(item.spend) || 0,
+                    sales: parseFloat(item.sales) || 0,
+                    orders: parseInt(item.orders) || 0,
+                    clicks: parseInt(item.clicks) || 0,
+                    impressions: parseInt(item.impressions) || 0
+                }));
+
+            if (records.length > 0) {
+                const { error } = await supabase
+                    .from('advertising')
+                    .insert(records);
+
+                if (error) throw error;
+                console.log(`✅ Saved ${records.length} advertising records for ${vendor}`);
+            }
+        } catch (error) {
+            console.error('Error saving Advertising:', error);
+            throw error;
+        }
+    },
+
+    async loadAdvertising(vendor) {
+        try {
+            const userId = this.getUserId();
+            console.log(`📥 Loading Advertising for ${vendor}...`);
+
+            const { data, error } = await supabase
+                .from('advertising')
+                .select('*')
+                .eq('user_id', userId)
+                .eq('vendor', vendor)
+                .order('date', { ascending: false });
+
+            if (error) throw error;
+
+            const adData = data.map((item, index) => ({
+                id: index + 1,
+                date: item.date,
+                asin: item.asin,
+                spend: item.spend,
+                sales: item.sales,
+                orders: item.orders,
+                clicks: item.clicks,
+                impressions: item.impressions
+            }));
+
+            console.log(`✅ Loaded ${adData.length} advertising records for ${vendor}`);
+            return adData;
+        } catch (error) {
+            console.error('Error loading Advertising:', error);
+            return [];
+        }
+    },
+
+    // ============================================
+    // VRET & COGS OPERATIONS
+    // ============================================
+
+    async saveVretCogs(vendor, vretCogsData) {
+        try {
+            const userId = this.getUserId();
+            console.log(`💾 Saving VRET & COGS for ${vendor}...`);
+
+            // Delete existing records for this vendor
+            await supabase
+                .from('vret_cogs')
+                .delete()
+                .eq('user_id', userId)
+                .eq('vendor', vendor);
+
+            // Insert new records
+            const records = vretCogsData
+                .filter(item => item.month && item.year)
+                .map(item => ({
+                    user_id: userId,
+                    vendor: vendor,
+                    month: item.month,
+                    year: item.year,
+                    vret: parseFloat(item.vret) || 0,
+                    cogs: parseFloat(item.cogs) || 0
+                }));
+
+            if (records.length > 0) {
+                const { error } = await supabase
+                    .from('vret_cogs')
+                    .insert(records);
+
+                if (error) throw error;
+                console.log(`✅ Saved ${records.length} VRET & COGS records for ${vendor}`);
+            }
+        } catch (error) {
+            console.error('Error saving VRET & COGS:', error);
+            throw error;
+        }
+    },
+
+    async loadVretCogs(vendor) {
+        try {
+            const userId = this.getUserId();
+            console.log(`📥 Loading VRET & COGS for ${vendor}...`);
+
+            const { data, error } = await supabase
+                .from('vret_cogs')
+                .select('*')
+                .eq('user_id', userId)
+                .eq('vendor', vendor)
+                .order('year', { ascending: false })
+                .order('month', { ascending: false });
+
+            if (error) throw error;
+
+            const vretCogsData = data.map((item, index) => ({
+                id: index + 1,
+                month: item.month,
+                year: item.year,
+                vret: item.vret,
+                cogs: item.cogs
+            }));
+
+            console.log(`✅ Loaded ${vretCogsData.length} VRET & COGS records for ${vendor}`);
+            return vretCogsData;
+        } catch (error) {
+            console.error('Error loading VRET & COGS:', error);
+            return [];
+        }
+    },
+
+    // ============================================
+    // LOAD ALL DATA
+    // ============================================
+
+    async loadAllData() {
+        try {
+            console.log('📥 Loading all data from Supabase...');
+            showNotification('Loading your data...', 'info');
+
+            const vendors = ['etrade', 'retailez', 'clicktech'];
+
+            for (const vendor of vendors) {
+                // Load ASIN Master
+                state.asinData[vendor] = await this.loadAsinMaster(vendor);
+
+                // Load Invoices
+                state.savedInvoices[vendor] = await this.loadInvoices(vendor);
+
+                // Load Advertising
+                state.advertisingData[vendor] = await this.loadAdvertising(vendor);
+
+                // Load VRET & COGS
+                state.savedVretCogs[vendor] = await this.loadVretCogs(vendor);
+            }
+
+            console.log('✅ All data loaded successfully');
+            showNotification('✅ Data loaded successfully!', 'success');
+        } catch (error) {
+            console.error('Error loading data:', error);
+            showNotification('❌ Error loading data: ' + error.message, 'error');
+            throw error;
+        }
     }
 };
 
-window.checkState = function() {
-    console.log('State:', {
-        etrade: state.advertisingData.etrade.length,
-        retailez: state.advertisingData.retailez.length,
-        clicktech: state.advertisingData.clicktech.length
-    });
-    if (state.advertisingData.etrade.length > 0) {
-        console.log('Sample:', state.advertisingData.etrade[0]);
-    }
-};
+// Initialize authentication on page load
+checkAuthState();
 
-console.log('✓ Google Sheets integration ready');
+console.log('✓ Supabase integration ready');
     </script>
+    </div> <!-- Close appContainer -->
 </body>
 </html>
