@@ -1744,7 +1744,19 @@
                 alert('⚠ No valid data to save. Please ensure Invoice ID and ASIN are filled.');
                 return;
             }
-            
+
+            // Check for duplicate invoice IDs
+            const invoiceIds = [...new Set(validData.map(item => item.invoiceId))];
+            const existingInvoices = state.savedInvoices[state.selectedVendor];
+            const duplicates = invoiceIds.filter(id =>
+                existingInvoices.some(inv => inv.invoiceId === id)
+            );
+
+            if (duplicates.length > 0) {
+                alert(`⚠ Cannot save! Invoice ID(s) already exist: ${duplicates.join(', ')}\n\nPlease use a different Invoice ID or delete the existing invoice first.`);
+                return;
+            }
+
             state.savedInvoices[state.selectedVendor].push(...validData);
             state.invoiceData = [{ id: 1, invoiceId: '', asin: '', quantity: '', itemPrice: '', date: '' }];
             saveData();
@@ -1968,7 +1980,16 @@
                 alert('⚠ No valid data to save. Please ensure ASIN is filled.');
                 return;
             }
-            
+
+            // Check for duplicate invoice IDs
+            const existingInvoices = state.savedInvoices[state.selectedVendor];
+            const isDuplicate = existingInvoices.some(inv => inv.invoiceId === state.fcInvoiceId);
+
+            if (isDuplicate) {
+                alert(`⚠ Cannot save! Invoice ID "${state.fcInvoiceId}" already exists.\n\nPlease use a different Invoice ID or delete the existing invoice first.`);
+                return;
+            }
+
             const dataWithInvoiceInfo = validData.map(item => ({
                 ...item,
                 invoiceId: state.fcInvoiceId,
