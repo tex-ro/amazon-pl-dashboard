@@ -5580,38 +5580,21 @@ const SupabaseDB = {
                 .eq('user_id', userId)
                 .eq('vendor', vendor);
 
-            // Group records by invoice_id + asin to handle duplicates
-            const recordsMap = {};
-
-            invoiceData.forEach(item => {
-                if (!item.asin || !item.invoiceId) return;
-
-                const key = `${item.invoiceId}_${item.asin}`;
-
-                if (!recordsMap[key]) {
-                    // First occurrence - save it
-                    recordsMap[key] = {
-                        user_id: userId,
-                        vendor: vendor,
-                        date: item.date,
-                        invoice_id: item.invoiceId,
-                        asin: item.asin,
-                        quantity: parseInt(item.quantity) || 0,
-                        item_price: parseFloat(item.itemPrice) || 0,
-                        freight_cost: parseFloat(state.freightCosts[vendor]?.[item.invoiceId]) || 0
-                    };
-                } else {
-                    // Duplicate found - sum the quantities
-                    console.log(`⚠️ Duplicate found: Invoice ${item.invoiceId}, ASIN ${item.asin} - summing quantities`);
-                    recordsMap[key].quantity += parseInt(item.quantity) || 0;
-                }
-            });
-
-            const records = Object.values(recordsMap);
+            // Insert all records - duplicates allowed
+            const records = invoiceData
+                .filter(item => item.asin && item.invoiceId)
+                .map(item => ({
+                    user_id: userId,
+                    vendor: vendor,
+                    date: item.date,
+                    invoice_id: item.invoiceId,
+                    asin: item.asin,
+                    quantity: parseInt(item.quantity) || 0,
+                    item_price: parseFloat(item.itemPrice) || 0,
+                    freight_cost: parseFloat(state.freightCosts[vendor]?.[item.invoiceId]) || 0
+                }));
 
             if (records.length > 0) {
-                console.log(`Filtered to ${records.length} unique invoice+asin combinations`);
-
                 const { data, error } = await supabase
                     .from('invoices')
                     .insert(records);
